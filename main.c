@@ -23,6 +23,7 @@ static void PrintHelp(char* prog_name);
 int main(int argc, char** argv) {
 	pe_dos_header dosHeader;
 	FILE* f = NULL;
+	ach_mode mode = MODE_32BIT;
 	
 	ParseOptions(argc, argv);
 	
@@ -53,6 +54,8 @@ int main(int argc, char** argv) {
 	
 	//read nt header
 	pe_nt_header ntHeader;
+	pe64_nt_header ntHeader64;
+	
 	if (fseek(f, dosHeader.e_lfanew, SEEK_SET) < 0) {
 		fprintf(stderr, "File %s doesn't have nt header\n", file_path);
 		fclose(f);
@@ -65,12 +68,42 @@ int main(int argc, char** argv) {
 		return -4;
 	}
 	
-	fprintf(stdout, "EntryPoint: 0x%08X\n", ntHeader.nt_optional_header.address_of_entry_point);
-	fprintf(stdout, "ImageBase: 0x%08X\n", ntHeader.nt_optional_header.image_base);
-	fprintf(stdout, "File alignment: 0x%08X\n", ntHeader.nt_optional_header.file_alignment);
+	if (ntHeader.nt_optional_header.magic == IMAGE_NT_OPTIONAL_64_MAGIC) {
+		//it is 64bit binary
+		mode = MODE_64BIT;
+		
+		//reparse to another header
+		fseek(f, dosHeader.e_lfanew, SEEK_SET);
+		
+		if (fread(&ntHeader64, sizeof(pe64_nt_header), 1, f) == 0) {
+			fprintf(stderr, "File %s too small (NT64 header)\n", file_path);
+			fclose(f);
+			return -4;
+		}
+	}
+	
+	uint16_t sections_table_offset = 0;
+	
+	switch (mode) {
+		case MODE_32BIT:
+			fprintf(stdout, "That binary has 32bit arch\n");
+			fprintf(stdout, "EntryPoint: 0x%08X\n", ntHeader.nt_optional_header.address_of_entry_point);
+			fprintf(stdout, "ImageBase: 0x%08X\n", ntHeader.nt_optional_header.image_base);
+			fprintf(stdout, "File alignment: 0x%08X\n", ntHeader.nt_optional_header.file_alignment);
+			
+			sections_table_offset = dosHeader.e_lfanew + ntHeader.nt_file_header.size_of_optional_header + sizeof(pe_file_header) + sizeof(uint32_t);
+			break;
+		case MODE_64BIT:
+			fprintf(stdout, "That binary has 64bit arch\n");
+			fprintf(stdout, "EntryPoint: 0x%08X\n", ntHeader64.nt_optional_header.address_of_entry_point);
+			fprintf(stdout, "ImageBase: 0x%016lX\n", ntHeader64.nt_optional_header.image_base);
+			fprintf(stdout, "File alignment: 0x%08X\n", ntHeader64.nt_optional_header.file_alignment);
+			
+			sections_table_offset = dosHeader.e_lfanew + ntHeader64.nt_file_header.size_of_optional_header + sizeof(pe_file_header) + sizeof(uint32_t);
+			break;
+	}
 	
 	//parse table of section
-	uint16_t sections_table_offset = dosHeader.e_lfanew + ntHeader.nt_file_header.size_of_optional_header + sizeof(pe_file_header) + sizeof(uint32_t);
 	rewind(f);
 	
 	if (fseek(f, sections_table_offset, SEEK_SET) < 0) {
@@ -80,17 +113,37 @@ int main(int argc, char** argv) {
 	}
 	
 	if (show_sections_flag) {
-		for (uint16_t i = 0; i < ntHeader.nt_file_header.number_of_sections; i++) {
-			pe_section_header sectionHeader;
+		switch (mode) {
+			case MODE_32BIT:
+				for (uint16_t i = 0; i < ntHeader.nt_file_header.number_of_sections; i++) {
+					pe_section_header sectionHeader;
+					
+					if (fread(&sectionHeader, sizeof(pe_section_header), 1, f) == 0) {
+						fprintf(stderr, "File %s too small (Can't read section number %d)\n", file_path, i);
+						fclose(f);
+						return -6;
+					}
+					
+					pe_print_section_header(&sectionHeader);
+					fprintf(stdout, "\n");
+				}
+				
+				break;
+			case MODE_64BIT:
+				for (uint16_t i = 0; i < ntHeader64.nt_file_header.number_of_sections; i++) {
+					pe_section_header sectionHeader;
+					
+					if (fread(&sectionHeader, sizeof(pe_section_header), 1, f) == 0) {
+						fprintf(stderr, "File %s too small (Can't read section number %d)\n", file_path, i);
+						fclose(f);
+						return -6;
+					}
+					
+					pe_print_section_header(&sectionHeader);
+					fprintf(stdout, "\n");
+				}
 			
-			if (fread(&sectionHeader, sizeof(pe_section_header), 1, f) == 0) {
-				fprintf(stderr, "File %s too small (Can't read section number %d)\n", file_path, i);
-				fclose(f);
-				return -6;
-			}
-			
-			pe_print_section_header(&sectionHeader);
-			fprintf(stdout, "\n");
+				break;
 		}
 	}
 	
@@ -129,7 +182,16 @@ int main(int argc, char** argv) {
 	
 	fread(xcode, size, 1, sf);
 	
-	int err = pe_infect_section(f, out_f, &dosHeader, &ntHeader, xcode, size);
+	int err = 0;
+	switch (mode) {
+		case MODE_32BIT:
+			err = pe_infect_section(f, out_f, &dosHeader, &ntHeader, xcode, size);
+			break;
+		case MODE_64BIT:
+			err = pe64_infect_section(f, out_f, &dosHeader, &ntHeader64, xcode, size);
+			break;
+	}
+	
 	if (!err) {
 		fprintf(stdout, "Infection success!\n");
 	} else {
