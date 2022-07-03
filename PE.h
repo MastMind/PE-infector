@@ -7,20 +7,30 @@
 
 
 
-#define SECTION_SHORT_NAME_LENGTH 8
-#define SECTION_CHARACTER_EXECUTABLE 0x00000020
-#define DLL_CHARACTER_CAN_MOVE       0x0040
-#define DLL_CHARACTER_NX_COMPAT      0x0100
-#define IMAGE_RELOCS_STRIPPED        0x0001
+#define DOS_MAGIC_VALUE               0x5A4D
+#define NT_MAGIC_VALUE                0x00004550
 
-#define IMAGE_NT_OPTIONAL_32_MAGIC   0x10b
-#define IMAGE_NT_OPTIONAL_64_MAGIC   0x20b
+#define SECTION_SHORT_NAME_LENGTH 8
+#define SECTION_CHARACTER_EXECUTABLE  0x00000020
+#define SECTION_CHARACTER_MEM_EXECUTE 0x20000000
+#define SECTION_CHARACTER_MEM_READ    0x40000000
+#define DLL_CHARACTER_CAN_MOVE        0x0040
+#define DLL_CHARACTER_NX_COMPAT       0x0100
+#define IMAGE_RELOCS_STRIPPED         0x0001
+
+#define IMAGE_NT_OPTIONAL_32_MAGIC    0x10b
+#define IMAGE_NT_OPTIONAL_64_MAGIC    0x20b
 
 
 typedef enum arch_mode_ {
 	MODE_32BIT = 1,
 	MODE_64BIT
 } ach_mode;
+
+typedef enum inf_method_ {
+	METHOD_CODE_INJECT = 1,
+	METHOD_CODE_NEWSECT
+} inf_method;
 
 typedef struct pe_dos_header_ {
 	uint16_t e_magic;
