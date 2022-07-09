@@ -1,8 +1,8 @@
 @ECHO OFF
 
 set BUILD_DIR=build
-set CXXFLAGS=-Wall -c -I. -static
-set LDFLAGS=-L. -static -m32
+set CXXFLAGS=-Wall -c -static
+set LDFLAGS=-L. -static
 set PROGNAME=PE-infector
 rd /S /Q %BUILD_DIR%
 mkdir %BUILD_DIR%

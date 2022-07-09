@@ -3,6 +3,7 @@
 
 
 #include <stdint.h>
+#include <stdio.h>
 
 
 
@@ -192,6 +193,21 @@ typedef struct pe_section_header_ {
 	uint16_t NumberOfLinenumbers;
 	uint32_t Characteristics;
 } __attribute__((packed)) pe_section_header;
+
+typedef struct list_pe_section_ {
+	pe_section_header header;
+	char* data;
+	struct list_pe_section_* next;
+} list_pe_section;
+
+typedef list_pe_section* list_pe_section_t;
+
+
+int pe_parse(FILE* f, pe_dos_header* dosHeader, pe_nt_header* ntHeader, pe64_nt_header* ntHeader64);
+list_pe_section_t pe_parse_sections(FILE* f, pe_dos_header* dosHeader, pe_nt_header* ntHeader);
+list_pe_section_t pe64_parse_sections(FILE* f, pe_dos_header* dosHeader, pe64_nt_header* ntHeader);
+int pe_write(FILE* out_f, pe_dos_header* dosHeader, pe_nt_header* ntHeader, list_pe_section_t sections, char* dosGap, uint16_t dosGapSize, char* sectGap, uint16_t sectGapSize);
+int pe64_write(FILE* out_f, pe_dos_header* dosHeader, pe64_nt_header* ntHeader, list_pe_section_t sections, char* dosGap, uint16_t dosGapSize, char* sectGap, uint16_t sectGapSize);
 
 
 #endif
