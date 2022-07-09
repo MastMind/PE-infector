@@ -21,8 +21,8 @@ void pe_print_section_header(pe_section_header* header) {
 	fprintf(stdout, "Section Characteristics: 0x%08X\n", header->Characteristics);
 }
 
-int pe_infect_section(pe_dos_header* dos_header, pe_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size) {
-	if (!dos_header || !nt_header || !sections || !xcode || *xcode == '\0') {
+int pe_infect_section(pe_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size) {
+	if (!nt_header || !sections || !xcode || *xcode == '\0') {
 		return -1;
 	}
 	
@@ -114,8 +114,8 @@ int pe_infect_section(pe_dos_header* dos_header, pe_nt_header* nt_header, list_p
 	return 0;
 }
 
-int pe64_infect_section(pe_dos_header* dos_header, pe64_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size) {
-	if (!dos_header || !nt_header || !sections || !xcode || *xcode == '\0') {
+int pe64_infect_section(pe64_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size) {
+	if (!nt_header || !sections || !xcode || *xcode == '\0') {
 		return -1;
 	}
 	
@@ -207,8 +207,8 @@ int pe64_infect_section(pe_dos_header* dos_header, pe64_nt_header* nt_header, li
 	return 0;
 }
 
-int pe_infect_new_section(pe_dos_header* dos_header, pe_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size, const char* new_section_name) {
-	if (!dos_header || !nt_header || !sections || !xcode || *xcode == '\0' || !new_section_name || *new_section_name == '\0') {
+int pe_infect_new_section(pe_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size, const char* new_section_name) {
+	if (!nt_header || !sections || !xcode || *xcode == '\0' || !new_section_name || *new_section_name == '\0') {
 		return -1;
 	}
 	
@@ -256,11 +256,9 @@ int pe_infect_new_section(pe_dos_header* dos_header, pe_nt_header* nt_header, li
 	//fill header
 	memset(&newSect->header, 0, sizeof(pe_section_header));
 	strncpy(newSect->header.name, new_section_name, SECTION_SHORT_NAME_LENGTH);
-	/*newSectionHeader.Misc.VirtualSize = xcode_size > nt_header->nt_optional_header.section_alignment ? nt_header->nt_optional_header.section_alignment : 
-																								nt_header->nt_optional_header.section_alignment * ((int)(xcode_size / nt_header->nt_optional_header.section_alignment) + 1);*/
 	newSect->header.Misc.VirtualSize = P2ALIGNUP(xcode_size, nt_header->nt_optional_header.section_alignment);
 	newSect->header.VirtualAddress = P2ALIGNUP(higher_virtual_offset + higher_virtual_size, nt_header->nt_optional_header.section_alignment);
-	newSect->header.SizeOfRawData = P2ALIGNUP(xcode_size, nt_header->nt_optional_header.file_alignment);
+	newSect->header.SizeOfRawData = P2ALIGNUP(xcode_size + 0x8, nt_header->nt_optional_header.file_alignment);
 	newSect->header.PointerToRawData = higher_raw_offset + higher_raw_size;
 	newSect->header.Characteristics = SECTION_CHARACTER_MEM_EXECUTE | SECTION_CHARACTER_MEM_READ | SECTION_CHARACTER_EXECUTABLE;
 	//fill section data
@@ -351,8 +349,8 @@ int pe_infect_new_section(pe_dos_header* dos_header, pe_nt_header* nt_header, li
 	return 0;
 }
 
-int pe64_infect_new_section(pe_dos_header* dos_header, pe64_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size, const char* new_section_name) {
-	if (!dos_header || !nt_header || !sections || !xcode || *xcode == '\0' || !new_section_name || *new_section_name == '\0') {
+int pe64_infect_new_section(pe64_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size, const char* new_section_name) {
+	if (!nt_header || !sections || !xcode || *xcode == '\0' || !new_section_name || *new_section_name == '\0') {
 		return -1;
 	}
 	
@@ -400,11 +398,9 @@ int pe64_infect_new_section(pe_dos_header* dos_header, pe64_nt_header* nt_header
 	//fill header
 	memset(&newSect->header, 0, sizeof(pe_section_header));
 	strncpy(newSect->header.name, new_section_name, SECTION_SHORT_NAME_LENGTH);
-	/*newSectionHeader.Misc.VirtualSize = xcode_size > nt_header->nt_optional_header.section_alignment ? nt_header->nt_optional_header.section_alignment : 
-																								nt_header->nt_optional_header.section_alignment * ((int)(xcode_size / nt_header->nt_optional_header.section_alignment) + 1);*/
 	newSect->header.Misc.VirtualSize = P2ALIGNUP(xcode_size, nt_header->nt_optional_header.section_alignment);
 	newSect->header.VirtualAddress = P2ALIGNUP(higher_virtual_offset + higher_virtual_size, nt_header->nt_optional_header.section_alignment);
-	newSect->header.SizeOfRawData = P2ALIGNUP(xcode_size, nt_header->nt_optional_header.file_alignment);
+	newSect->header.SizeOfRawData = P2ALIGNUP(xcode_size + 0x10, nt_header->nt_optional_header.file_alignment);
 	newSect->header.PointerToRawData = higher_raw_offset + higher_raw_size;
 	newSect->header.Characteristics = SECTION_CHARACTER_MEM_EXECUTE | SECTION_CHARACTER_MEM_READ | SECTION_CHARACTER_EXECUTABLE;
 	//fill section data

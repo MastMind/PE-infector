@@ -174,14 +174,14 @@ int main(int argc, char** argv) {
 		case MODE_32BIT:
 			switch (method) {
 				case METHOD_CODE_INJECT:
-					err = pe_infect_section(&dosHeader, &ntHeader, sections, xcode, xcode_size);
+					err = pe_infect_section(&ntHeader, sections, xcode, xcode_size);
 					break;
 				case METHOD_CODE_NEWSECT:
 					if (sectOriginalGapSize <= sizeof(pe_section_header)) {
 						fprintf(stderr, "Not enough space in section header for new section record\n");
 						err = -10;
 					} else {
-						err = pe_infect_new_section(&dosHeader, &ntHeader, sections, xcode, xcode_size, ".rsrc");
+						err = pe_infect_new_section(&ntHeader, sections, xcode, xcode_size, ".rsrc");
 						if (!err) {
 							sectOriginalGapSize -= sizeof(pe_section_header); //decrease section gap
 						}
@@ -194,17 +194,16 @@ int main(int argc, char** argv) {
 			}
 			break;
 		case MODE_64BIT:
-			//err = pe64_infect_section(&dosHeader, &ntHeader64, sections, xcode, xcode_size);
 			switch (method) {
 				case METHOD_CODE_INJECT:
-					err = pe64_infect_section(&dosHeader, &ntHeader64, sections, xcode, xcode_size);
+					err = pe64_infect_section(&ntHeader64, sections, xcode, xcode_size);
 					break;
 				case METHOD_CODE_NEWSECT:
 					if (sectOriginalGapSize <= sizeof(pe_section_header)) {
 						fprintf(stderr, "Not enough space in section header for new section record\n");
 						err = -10;
 					} else {
-						err = pe64_infect_new_section(&dosHeader, &ntHeader64, sections, xcode, xcode_size, ".rsrc");
+						err = pe64_infect_new_section(&ntHeader64, sections, xcode, xcode_size, ".rsrc");
 						if (!err) {
 							sectOriginalGapSize -= sizeof(pe_section_header); //decrease section gap
 						}
