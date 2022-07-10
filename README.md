@@ -18,5 +18,6 @@ Usage:
 	
 		1. Code injection (default method; success if enough empty space)
 		2. Create new section (turn on with option -m sect)
+		3. Resize current code section (turn on with option -m resz)
 		
 	Also support output for current sections (option -d)
