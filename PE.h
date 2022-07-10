@@ -23,16 +23,6 @@
 #define IMAGE_NT_OPTIONAL_64_MAGIC    0x20b
 
 
-typedef enum arch_mode_ {
-	MODE_32BIT = 1,
-	MODE_64BIT
-} ach_mode;
-
-typedef enum inf_method_ {
-	METHOD_CODE_INJECT = 1,
-	METHOD_CODE_NEWSECT
-} inf_method;
-
 typedef struct pe_dos_header_ {
 	uint16_t e_magic;
 	uint16_t e_cblp;
@@ -202,6 +192,10 @@ typedef struct list_pe_section_ {
 
 typedef list_pe_section* list_pe_section_t;
 
+
+
+
+void pe_print_section_header(pe_section_header* header);
 
 int pe_parse(FILE* f, pe_dos_header* dosHeader, pe_nt_header* ntHeader, pe64_nt_header* ntHeader64);
 list_pe_section_t pe_parse_sections(FILE* f, pe_dos_header* dosHeader, pe_nt_header* ntHeader);

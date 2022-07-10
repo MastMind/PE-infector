@@ -31,6 +31,19 @@
 
 static list_pe_section_t build_list_sections(FILE* f, uint16_t sections_table_offset, uint16_t number_of_sections);
 
+void pe_print_section_header(pe_section_header* header) {
+	fprintf(stdout, "Section name: %s\n", header->name);
+	fprintf(stdout, "Section VirtualSize: 0x%08X\n", header->Misc.VirtualSize);
+	fprintf(stdout, "Section VirtualAddress: 0x%08X\n", header->VirtualAddress);
+	fprintf(stdout, "Section SizeOfRawData: %u\n", header->SizeOfRawData);
+	fprintf(stdout, "Section PointerToRawData: 0x%08X\n", header->PointerToRawData);
+	fprintf(stdout, "Section PointerToRelocations: 0x%08X\n", header->PointerToRelocations);
+	fprintf(stdout, "Section PointerToLinenumbers: 0x%08X\n", header->PointerToLinenumbers);
+	fprintf(stdout, "Section NumberOfRelocations: %u\n", header->NumberOfRelocations);
+	fprintf(stdout, "Section NumberOfLinenumbers: %u\n", header->NumberOfLinenumbers);
+	fprintf(stdout, "Section Characteristics: 0x%08X\n", header->Characteristics);
+}
+
 int pe_parse(FILE* f, pe_dos_header* dosHeader, pe_nt_header* ntHeader, pe64_nt_header* ntHeader64) {
 	if (!f || !dosHeader || !ntHeader || !ntHeader64) {
 		return -1;

