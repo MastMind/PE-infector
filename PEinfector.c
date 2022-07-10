@@ -451,7 +451,7 @@ int pe64_infect_new_section(pe64_nt_header* nt_header, list_pe_section_t section
 	//new entry point
 	nt_header->nt_optional_header.address_of_entry_point = codeSect->header.VirtualAddress + injection_offset;
 	
-	fprintf(stdout, "original entry point 0x%16X\n", original_entry_point);
+	fprintf(stdout, "original entry point 0x%16lX\n", original_entry_point);
 	fprintf(stdout, "injection new_entry_point 0x%08X\n", nt_header->nt_optional_header.address_of_entry_point);
 	
 	DISABLE_DEP_ASLR
@@ -628,8 +628,8 @@ int pe64_infect_resize_section(pe64_nt_header* nt_header, list_pe_section_t sect
 	//new entry point
 	nt_header->nt_optional_header.address_of_entry_point = codeSect->header.VirtualAddress + injection_xcode_offset;
 	
-	fprintf(stdout, "original entry point 0x%16X\n", original_entry_point);
-	fprintf(stdout, "injection new_entry_point 0x%16X\n", nt_header->nt_optional_header.address_of_entry_point);
+	fprintf(stdout, "original entry point 0x%16lX\n", original_entry_point);
+	fprintf(stdout, "injection new_entry_point 0x%08X\n", nt_header->nt_optional_header.address_of_entry_point);
 	
 	DISABLE_DEP_ASLR
 	
