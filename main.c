@@ -16,6 +16,7 @@ static char file_path[MAX_FILE_PATH] = "";
 static char shellcode_file_path[MAX_FILE_PATH] = "";
 static char output_file_path[MAX_FILE_PATH] = "";
 static int show_sections_flag = 0;
+static int thread_flag = 0;
 
 static void ParseOptions(int argc, char** argv);
 static void PrintHelp(char* prog_name);
@@ -175,21 +176,21 @@ int main(int argc, char** argv) {
 		case MODE_32BIT:
 			switch (method) {
 				case METHOD_CODE_INJECT:
-					err = pe_infect_section(&ntHeader, sections, xcode, xcode_size);
+					err = pe_infect_section(&ntHeader, sections, xcode, xcode_size, thread_flag);
 					break;
 				case METHOD_CODE_NEWSECT:
 					if (sectOriginalGapSize <= sizeof(pe_section_header)) {
 						fprintf(stderr, "Not enough space in section header for new section record\n");
 						err = -10;
 					} else {
-						err = pe_infect_new_section(&ntHeader, sections, xcode, xcode_size, strlen(section_name) ? section_name : ".rsrc");
+						err = pe_infect_new_section(&ntHeader, sections, xcode, xcode_size, strlen(section_name) ? section_name : ".rsrc", thread_flag);
 						if (!err) {
 							sectOriginalGapSize -= sizeof(pe_section_header); //decrease section gap
 						}
 					}
 					break;
 				case METHOD_CODE_RESIZE:
-					err = pe_infect_resize_section(&ntHeader, sections, xcode, xcode_size);
+					err = pe_infect_resize_section(&ntHeader, sections, xcode, xcode_size, thread_flag);
 					break;
 			}
 			
@@ -198,6 +199,11 @@ int main(int argc, char** argv) {
 			}
 			break;
 		case MODE_64BIT:
+			if (thread_flag) {
+				fprintf(stderr, "Thread flag can apply for 32bit binaries only\n");
+				err = -11;
+				break;
+			}
 			switch (method) {
 				case METHOD_CODE_INJECT:
 					err = pe64_infect_section(&ntHeader64, sections, xcode, xcode_size);
@@ -240,7 +246,7 @@ int main(int argc, char** argv) {
 }
 
 static void ParseOptions(int argc, char** argv) {
-	const char* short_options = "hi:o:s:dm:n:";
+	const char* short_options = "hi:o:s:dm:n:t";
 	
 	const struct option long_options[] = {
 		{ "help", no_argument, NULL, 'h' },
@@ -250,6 +256,7 @@ static void ParseOptions(int argc, char** argv) {
 		{ "info", no_argument, NULL, 'd' },
 		{ "method",  required_argument, NULL, 'm' },
 		{ "name", required_argument, NULL, 'n' },
+		{ "thread", no_argument, NULL, 't' },
 		{ NULL, 0, NULL, 0 }
 	};
 	
@@ -289,6 +296,9 @@ static void ParseOptions(int argc, char** argv) {
 			case 'n':
 				strncpy(section_name, optarg, SECTION_SHORT_NAME_LENGTH);
 				break;
+			case 't':
+				thread_flag = 1;
+				break;
 			default:
 				PrintHelp(argv[0]);
 				break;
@@ -301,9 +311,11 @@ static void PrintHelp(char* prog_name) {
 	fprintf(stdout, "\t -d - show section info\n");
 	fprintf(stdout, "\t -m - set infection method (available values: code, sect, resz)\n");
 	fprintf(stdout, "\t -n - set new section name (for selected method: sect)\n");
+	fprintf(stdout, "\t -t - execute shellcode into another thread (for 32bit and resize or new section methods only)\n");
 	fprintf(stdout, "Long options usage: %s --input <input_file> --output <output_file> --shellcode <raw_shellcode_file>\n", prog_name);
 	fprintf(stdout, "\t --info - show section info\n");
 	fprintf(stdout, "\t --method - set infection method (available values: code, sect)\n");
 	fprintf(stdout, "\t --name - set new section name (for selected method: sect)\n");
+	fprintf(stdout, "\t --thread - execute shellcode into another thread (for 32bit only)\n");
 	exit(-99);
 }
