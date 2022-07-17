@@ -21,3 +21,5 @@ Usage:
 		3. Resize current code section (turn on with option -m resz)
 		
 	Also support output for current sections (option -d)
+	
+	Also support run shellcode in another thread (option -t or --thread. For 32bit only)
