@@ -82,14 +82,18 @@ int pe_parse(FILE* f, pe_dos_header* dosHeader, pe_nt_header* ntHeader, pe64_nt_
 		
 		if (ntHeader64->nt_optional_header.image_base < 0x400000 || 
 			ntHeader64->nt_optional_header.image_base > 0x1000000) {
-			//strange PE file
-			return -8;
+			if (!(ntHeader64->nt_file_header.characteristics & IMAGE_FILE_DLL)) {
+				//strange PE file
+				return -8;
+			}
 		}
 	} else {
 		if (ntHeader->nt_optional_header.image_base < 0x400000 || 
 			ntHeader->nt_optional_header.image_base > 0x1000000) {
-			//strange PE file
-			return -8;
+			if (!(ntHeader->nt_file_header.characteristics & IMAGE_FILE_DLL)) {
+				//strange PE file
+				return -8;
+			}
 		}
 	}
 	

@@ -18,6 +18,7 @@
 #define DLL_CHARACTER_CAN_MOVE        0x0040
 #define DLL_CHARACTER_NX_COMPAT       0x0100
 #define IMAGE_RELOCS_STRIPPED         0x0001
+#define IMAGE_FILE_DLL                0x2000
 
 #define IMAGE_NT_OPTIONAL_32_MAGIC    0x10b
 #define IMAGE_NT_OPTIONAL_64_MAGIC    0x20b

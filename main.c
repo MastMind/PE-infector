@@ -87,6 +87,7 @@ int main(int argc, char** argv) {
 	switch (mode) {
 		case MODE_32BIT:
 			fprintf(stdout, "That binary has 32bit arch\n");
+			fprintf(stdout, "That is %s file\n", (ntHeader.nt_file_header.characteristics & IMAGE_FILE_DLL) ? "DLL" : "EXE");
 			fprintf(stdout, "EntryPoint: 0x%08X\n", ntHeader.nt_optional_header.address_of_entry_point);
 			fprintf(stdout, "ImageBase: 0x%08X\n", ntHeader.nt_optional_header.image_base);
 			fprintf(stdout, "File alignment: 0x%08X\n", ntHeader.nt_optional_header.file_alignment);
@@ -97,6 +98,7 @@ int main(int argc, char** argv) {
 			break;
 		case MODE_64BIT:
 			fprintf(stdout, "That binary has 64bit arch\n");
+			fprintf(stdout, "That is %s file\n", (ntHeader64.nt_file_header.characteristics & IMAGE_FILE_DLL) ? "DLL" : "EXE");
 			fprintf(stdout, "EntryPoint: 0x%08X\n", ntHeader64.nt_optional_header.address_of_entry_point);
 			fprintf(stdout, "ImageBase: 0x%016lX\n", ntHeader64.nt_optional_header.image_base);
 			fprintf(stdout, "File alignment: 0x%08X\n", ntHeader64.nt_optional_header.file_alignment);

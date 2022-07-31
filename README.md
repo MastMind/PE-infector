@@ -1,5 +1,5 @@
 # PE-infector
-Crossplatform tool for inject shellcode into .exe binaries (x86 and 64).
+Crossplatform tool for inject shellcode into .exe or .dll binaries (x86 and 64).
 
 Build:
 
@@ -12,7 +12,7 @@ Build:
 Usage:
 
 1. Prepare the shellcode (for example build raw shellcode with metasploit framework to file; recommend with option EXITFUNC=none if it possible for resume execution of original program)
-2. Run PE-infector -i <path_for_source_exe> -o <patched_exe> -s <path_for_shellcode>
+2. Run PE-infector -i <path_for_source_exe_or_dll> -o <patched_exe_or_dll> -s <path_for_shellcode>
 	Support x86 and x64 .exe binaries. 
 	Also support injection methods:
 	
