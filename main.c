@@ -185,7 +185,7 @@ int main(int argc, char** argv) {
 						fprintf(stderr, "Not enough space in section header for new section record\n");
 						err = -10;
 					} else {
-						err = pe_infect_new_section(&ntHeader, sections, xcode, xcode_size, strlen(section_name) ? section_name : ".rsrc", thread_flag);
+						err = pe_infect_new_section(&ntHeader, sections, xcode, xcode_size, strlen(section_name) ? section_name : ".code", thread_flag);
 						if (!err) {
 							sectOriginalGapSize -= sizeof(pe_section_header); //decrease section gap
 						}
@@ -215,7 +215,7 @@ int main(int argc, char** argv) {
 						fprintf(stderr, "Not enough space in section header for new section record\n");
 						err = -10;
 					} else {
-						err = pe64_infect_new_section(&ntHeader64, sections, xcode, xcode_size, strlen(section_name) ? section_name : ".rsrc");
+						err = pe64_infect_new_section(&ntHeader64, sections, xcode, xcode_size, strlen(section_name) ? section_name : ".code");
 						if (!err) {
 							sectOriginalGapSize -= sizeof(pe_section_header); //decrease section gap
 						}
