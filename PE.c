@@ -79,14 +79,6 @@ int pe_parse(FILE* f, pe_dos_header* dosHeader, pe_nt_header* ntHeader, pe64_nt_
 		if (fread(ntHeader64, sizeof(pe64_nt_header), 1, f) == 0) {
 			return -7;
 		}
-		
-		if (ntHeader64->nt_optional_header.image_base < 0x400000 || 
-			ntHeader64->nt_optional_header.image_base > 0x1000000) {
-			if (!(ntHeader64->nt_file_header.characteristics & IMAGE_FILE_DLL)) {
-				//strange PE file
-				return -8;
-			}
-		}
 	} else {
 		if (ntHeader->nt_optional_header.image_base < 0x400000 || 
 			ntHeader->nt_optional_header.image_base > 0x1000000) {

