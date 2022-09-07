@@ -316,7 +316,7 @@ static void PrintHelp(char* prog_name) {
 	fprintf(stdout, "\t -t - execute shellcode into another thread (for 32bit and resize or new section methods only)\n");
 	fprintf(stdout, "Long options usage: %s --input <input_file> --output <output_file> --shellcode <raw_shellcode_file>\n", prog_name);
 	fprintf(stdout, "\t --info - show section info\n");
-	fprintf(stdout, "\t --method - set infection method (available values: code, sect)\n");
+	fprintf(stdout, "\t --method - set infection method (available values: code, sect, resz)\n");
 	fprintf(stdout, "\t --name - set new section name (for selected method: sect)\n");
 	fprintf(stdout, "\t --thread - execute shellcode into another thread (for 32bit only)\n");
 	exit(-99);
