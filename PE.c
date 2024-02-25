@@ -22,7 +22,9 @@
 					} \
 					curSect = sections; \
 					while (curSect) { \
-						fwrite(curSect->data, curSect->header.SizeOfRawData, 1, out_f); \
+						if (curSect->data && curSect->header.SizeOfRawData) { \
+							fwrite(curSect->data, curSect->header.SizeOfRawData, 1, out_f); \
+						} \
 						curSect = curSect->next; \
 					}
 
@@ -133,38 +135,28 @@ int pe64_write(FILE* out_f, pe_dos_header* dosHeader, pe64_nt_header* ntHeader, 
 }
 
 static list_pe_section_t build_list_sections(FILE* f, uint16_t sections_table_offset, uint16_t number_of_sections) {
-	//parse table of section
 	list_pe_section_t ret = NULL;
 	list_pe_section_t curSect = ret;
-	
+
 	for (uint16_t i = 0; i < number_of_sections; i++) {
 		fseek(f, sections_table_offset + i * sizeof(pe_section_header), SEEK_SET);
-		
+
 		//pe_section_header sectionHeader;
 		list_pe_section_t newSect = (list_pe_section_t)malloc(sizeof(list_pe_section));
 		if (!newSect) {
 			//can't allocate memory for list
 			return NULL;
 		}
-					
+
 		if (fread(&newSect->header, sizeof(pe_section_header), 1, f) == 0) {
-			free(newSect);
-			return NULL;
-		}
-		
-		//fill section data
-		newSect->data = (char*)malloc(newSect->header.SizeOfRawData);
-			
-		if (!newSect->data) {
-			//internal error. Can't alloc memory for store section
-			return NULL;
-		}
-		
-		fseek(f, newSect->header.PointerToRawData, SEEK_SET);
-		fread(newSect->data, newSect->header.SizeOfRawData, 1, f);
-		newSect->next = NULL;
-		
-		if (!curSect) {
+ 			free(newSect);
+ 			return NULL;
+ 		}
+
+ 		newSect->data = NULL;
+ 		newSect->next = NULL;
+
+ 		if (!curSect) {
 			ret = newSect;
 		} else {
 			curSect->next = newSect;
@@ -172,6 +164,46 @@ static list_pe_section_t build_list_sections(FILE* f, uint16_t sections_table_of
 		
 		curSect = newSect;
 	}
-	
+
+	//fill data
+	curSect = ret;
+	list_pe_section_t nextSect = curSect->next;
+	uint16_t i = 0;
+
+	fseek(f, 0, SEEK_END);
+	uint32_t file_size = ftell(f);
+
+	while (curSect) {
+		uint32_t size = 0;
+
+		if (nextSect && nextSect->header.PointerToRawData <= curSect->header.PointerToRawData) {
+			nextSect = nextSect->next;
+		}
+
+		if (nextSect) {
+			size = nextSect->header.PointerToRawData - curSect->header.PointerToRawData;
+		} else {
+			size = file_size - curSect->header.PointerToRawData;
+		}
+
+		curSect->data = (char*)malloc(size);
+			
+		if (!curSect->data) {
+			//internal error. Can't alloc memory for store section
+			return NULL;
+		}
+		
+		fseek(f, curSect->header.PointerToRawData, SEEK_SET);
+		fread(curSect->data, size, 1, f);
+
+		curSect->header.SizeOfRawData = size;
+		curSect = nextSect;
+		if (nextSect) {
+			nextSect = nextSect->next;
+		}
+
+		i++;
+	}
+
 	return ret;
 }

