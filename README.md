@@ -22,11 +22,11 @@ Crossplatform tool for injecting shellcode into .exe or .dll binaries (x86 and 6
 		
 	Also support output for current sections (option -d)
 	
-	Also support run shellcode in another thread (option -t or --thread. For 32bit only)
+	Also support run shellcode in another thread (option -t or --thread. For 32bit and 64bit)
 
 ## Example:
 
-For Kali Linux instruction (it doesn't matter which distributive use; it is just convinient to use Kali linux cause it has preinstalled metasploit framework for generating shellcodes).
+Instruction for Kali Linux (it doesn't matter which distributive use; it is just convinient to use Kali linux cause it has preinstalled metasploit framework for generating shellcodes).
 
 1. Generate the shellcode with effect show the window with caption:
 

